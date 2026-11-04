@@ -1,0 +1,20 @@
+# Dependencias de Node (Backend y Frontend)
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Archivos de subida de backend (XML e imágenes temporales)
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Archivos de compilación de frontend
+frontend/dist/
+frontend/dist-ssr/
+
+# Logs del sistema
+*.log
+npm-debug.log*
+
+# Archivos del editor
+.vscode/
+.DS_Store
