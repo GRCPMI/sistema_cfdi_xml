@@ -664,7 +664,7 @@ export default function App() {
                 Facturas Extraídas ({filteredRecords.length})
               </h3>
               <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
-                Aparece registrada la fecha/hora exacta en la que se agregó cada archivo.
+                Aparecen registradas la fecha de la factura y el momento exacto de carga al sistema.
               </p>
             </div>
 
@@ -685,6 +685,7 @@ export default function App() {
               <thead>
                 <tr>
                   <th>Folio</th>
+                  <th>Fecha Emisión Factura</th>
                   <th>Fecha/Hora Carga</th>
                   <th>RFC Emisor</th>
                   <th>Nombre / Razón Social</th>
@@ -696,7 +697,7 @@ export default function App() {
               <tbody>
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan="7" style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
                       <FileText size={40} style={{ opacity: 0.2, margin: '0 auto 0.5rem auto', display: 'block' }} />
                       No hay comprobantes XML cargados.
                     </td>
@@ -705,14 +706,19 @@ export default function App() {
                   filteredRecords.map((record) => (
                     <tr key={record.id}>
                       <td style={{ fontFamily: 'monospace', color: '#60a5fa', fontWeight: 600 }}>{record.folio}</td>
+                      <td style={{ fontSize: '0.7rem', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'flex', itemsAlign: 'center', gap: '0.25rem' }}>
+                          <Calendar size={12} style={{ color: '#60a5fa' }} /> {record.fecha ? new Date(record.fecha).toLocaleDateString('es-MX') : 'S/F'}
+                        </span>
+                      </td>
                       <td style={{ fontSize: '0.7rem', color: '#38bdf8', whiteSpace: 'nowrap' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <span style={{ display: 'flex', itemsAlign: 'center', gap: '0.25rem' }}>
                           <Clock size={12} /> {record.fechaCarga || 'N/A'}
                         </span>
                       </td>
                       <td style={{ fontFamily: 'monospace' }}>{record.emisorRfc}</td>
                       <td style={{ fontWeight: 600, color: '#f1f5f9' }}>{record.emisorNombre}</td>
-                      <td style={{ maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#94a3b8' }}>
+                      <td style={{ maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#94a3b8' }}>
                         {record.concepto}
                       </td>
                       <td style={{ fontFamily: 'monospace', color: '#34d399', fontWeight: 700, textAlign: 'right', fontSize: '0.85rem' }}>
@@ -745,14 +751,25 @@ export default function App() {
             </div>
             
             <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div>
-                <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Folio:</label>
-                <input 
-                  type="text" 
-                  value={editingRecord.folio} 
-                  onChange={(e) => setEditingRecord({...editingRecord, folio: e.target.value})} 
-                  className="input-field" 
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Folio:</label>
+                  <input 
+                    type="text" 
+                    value={editingRecord.folio} 
+                    onChange={(e) => setEditingRecord({...editingRecord, folio: e.target.value})} 
+                    className="input-field" 
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Fecha de Emisión:</label>
+                  <input 
+                    type="text" 
+                    value={editingRecord.fecha} 
+                    onChange={(e) => setEditingRecord({...editingRecord, fecha: e.target.value})} 
+                    className="input-field" 
+                  />
+                </div>
               </div>
 
               <div>

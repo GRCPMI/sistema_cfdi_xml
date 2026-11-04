@@ -14,11 +14,10 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// Configuración de almacenamiento local para cargas de archivos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = './uploads';
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
   filename: (req, file, cb) => {
@@ -29,7 +28,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // -------------------------------------------------------------
-// RUTA 1: Procesamiento de archivos XML (CFDI 4.0)
+// RUTA 1: Extracción de XML (CFDI 4.0)
 // -------------------------------------------------------------
 app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
   try {
@@ -54,9 +53,9 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
         .map(c => c['$']?.Descripcion || c?.Descripcion || '')
         .join(' | ');
 
-      // Registro de fecha y hora actual de procesamiento
+      // Fecha y hora exacta de extracción en el servidor
       const now = new Date();
-      const fechaCargaFormatted = now.toLocaleString('es-MX', {
+      const fechaExtraccionFormatted = now.toLocaleString('es-MX', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -70,8 +69,8 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
         id: file.filename,
         uuid: comprobante['cfdi:Complemento']?.['tfd:TimbreFiscalDigital']?.['$']?.UUID || 'N/A',
         folio: comprobante['$']?.Folio || 'S/N',
-        fecha: comprobante['$']?.Fecha || new Date().toISOString(),
-        fechaCarga: fechaCargaFormatted,
+        fechaEmision: comprobante['$']?.Fecha || 'N/A',
+        fechaExtraccion: fechaExtraccionFormatted,
         emisorRfc: emisor['$']?.Rfc || 'N/A',
         emisorNombre: emisor['$']?.Nombre || 'N/A',
         receptorRfc: receptor['$']?.Rfc || 'N/A',
@@ -81,7 +80,7 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
         concepto: conceptosText || 'Sin descripción'
       });
 
-      // Limpiar archivo temporal
+      // Limpieza de archivo temporal
       fs.unlinkSync(file.path);
     }
 
@@ -93,7 +92,7 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
 });
 
 // -------------------------------------------------------------
-// RUTA 2: OCR de Identificación Oficial (INE desde Móvil)
+// RUTA 2: OCR de INE desde Móvil
 // -------------------------------------------------------------
 app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
   try {
@@ -101,10 +100,8 @@ app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
       return res.status(400).json({ error: 'No se subió ninguna imagen de INE.' });
     }
 
-    // Ejecución de OCR con Tesseract en español
     const { data: { text } } = await Tesseract.recognize(req.file.path, 'spa');
 
-    // Expresiones regulares para filtrado de campos clave
     const curpMatch = text.match(/[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d/);
     const claveElectorMatch = text.match(/[A-Z]{6}\d{8}[HM]\d{3}/);
 
@@ -114,7 +111,6 @@ app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
       rawText: text
     };
 
-    // Limpiar archivo temporal
     fs.unlinkSync(req.file.path);
 
     res.json({ success: true, ineData: extractedIne });
