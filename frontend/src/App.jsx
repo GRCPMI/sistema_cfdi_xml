@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Upload, FileSpreadsheet, Camera, Search, Layers, FileText, 
   UserCheck, ShieldCheck, CheckCircle2, Sparkles, Edit3, Trash2, 
-  X, Filter, Download, Save, Calendar, Clock
+  X, Filter, Download, Save, Calendar, Clock, ChevronRight
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -22,6 +22,10 @@ export default function App() {
   const [exportOption, setExportOption] = useState('all'); 
   const [minAmount, setMinAmount] = useState('');
   const [maxAmount, setMaxAmount] = useState('');
+
+  // Estado para Vista de Calendario por Mes
+  const [selectedMonthModal, setSelectedMonthModal] = useState(null); // { monthKey, monthName, year, records }
+  const [selectedDayDetails, setSelectedDayDetails] = useState(null); // Número de día seleccionado en el calendario
 
   // 1. Carga XML
   const handleXmlUpload = async (e) => {
@@ -97,20 +101,68 @@ export default function App() {
     const summary = {};
     xmlRecords.forEach(record => {
       const dateObj = new Date(record.fecha);
-      const monthYear = !isNaN(dateObj.getTime())
+      const isValidDate = !isNaN(dateObj.getTime());
+      
+      const monthYearKey = isValidDate 
+        ? `${dateObj.getFullYear()}-${dateObj.getMonth()}`
+        : 'sin-fecha';
+
+      const monthName = isValidDate
         ? dateObj.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
         : 'Sin Fecha';
       
-      const formattedKey = monthYear.charAt(0).toUpperCase() + monthYear.slice(1);
+      const formattedName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
-      if (!summary[formattedKey]) {
-        summary[formattedKey] = { count: 0, total: 0 };
+      if (!summary[monthYearKey]) {
+        summary[monthYearKey] = { 
+          key: monthYearKey,
+          name: formattedName,
+          year: isValidDate ? dateObj.getFullYear() : new Date().getFullYear(),
+          monthIndex: isValidDate ? dateObj.getMonth() : 0,
+          count: 0, 
+          total: 0,
+          records: []
+        };
       }
-      summary[formattedKey].count += 1;
-      summary[formattedKey].total += record.total;
+      summary[monthYearKey].count += 1;
+      summary[monthYearKey].total += record.total;
+      summary[monthYearKey].records.push(record);
     });
     return summary;
   }, [xmlRecords]);
+
+  // Abrir Modal de Calendario del Mes seleccionado
+  const handleOpenMonthCalendar = (monthData) => {
+    setSelectedMonthModal(monthData);
+    setSelectedDayDetails(null);
+  };
+
+  // Datos calculados para la cuadrícula del calendario
+  const monthCalendarGrid = useMemo(() => {
+    if (!selectedMonthModal || selectedMonthModal.key === 'sin-fecha') return null;
+
+    const { year, monthIndex, records } = selectedMonthModal;
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const firstDayIndex = new Date(year, monthIndex, 1).getDay(); // 0 = Domingo
+
+    // Agrupar facturas por número de día del mes
+    const daysData = {};
+    for (let day = 1; day <= daysInMonth; day++) {
+      daysData[day] = [];
+    }
+
+    records.forEach(rec => {
+      const recDate = new Date(rec.fecha);
+      if (!isNaN(recDate.getTime()) && recDate.getFullYear() === year && recDate.getMonth() === monthIndex) {
+        const dayNum = recDate.getDate();
+        if (daysData[dayNum]) {
+          daysData[dayNum].push(rec);
+        }
+      }
+    });
+
+    return { daysInMonth, firstDayIndex, daysData };
+  }, [selectedMonthModal]);
 
   // 5. Exportación a Excel
   const executeExport = () => {
@@ -383,19 +435,27 @@ export default function App() {
 
         .month-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
           gap: 1rem;
           margin-top: 1rem;
         }
 
         .month-item {
           background: rgba(15, 23, 42, 0.8);
-          border: 1px solid rgba(59, 130, 246, 0.2);
+          border: 1px solid rgba(59, 130, 246, 0.25);
           border-radius: 0.75rem;
           padding: 1rem;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .month-item:hover {
+          border-color: #38bdf8;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 15px rgba(56, 189, 248, 0.15);
         }
 
         .table-card {
@@ -497,9 +557,11 @@ export default function App() {
           border: 1px solid rgba(255, 255, 255, 0.1);
           border-radius: 1rem;
           width: 100%;
-          max-width: 500px;
+          max-width: 550px;
           padding: 1.5rem;
           box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+          max-height: 90vh;
+          overflow-y: auto;
         }
 
         .radio-option {
@@ -517,6 +579,70 @@ export default function App() {
         .radio-option.selected {
           border-color: #3b82f6;
           background: rgba(59, 130, 246, 0.1);
+        }
+
+        /* Estilos del Calendario del Mes */
+        .calendar-grid {
+          display: grid;
+          grid-template-columns: repeat(7, 1fr);
+          gap: 0.35rem;
+          margin-top: 1rem;
+        }
+
+        .calendar-day-header {
+          text-align: center;
+          font-size: 0.65rem;
+          font-weight: 700;
+          color: #94a3b8;
+          padding: 0.25rem 0;
+          text-transform: uppercase;
+        }
+
+        .calendar-day-cell {
+          background: rgba(15, 23, 42, 0.7);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 0.5rem;
+          min-height: 48px;
+          padding: 0.35rem;
+          display: flex;
+          flex-direction: column;
+          justify-content: space-between;
+          align-items: flex-start;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          position: relative;
+        }
+
+        .calendar-day-cell:hover {
+          border-color: #60a5fa;
+          background: rgba(30, 41, 59, 0.9);
+        }
+
+        .calendar-day-cell.active-has-data {
+          border-color: rgba(56, 189, 248, 0.4);
+          background: rgba(56, 189, 248, 0.1);
+        }
+
+        .calendar-day-cell.selected-day {
+          border-color: #10b981;
+          background: rgba(16, 185, 129, 0.15);
+          box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+        }
+
+        .day-number {
+          font-size: 0.7rem;
+          font-weight: 600;
+          color: #e2e8f0;
+        }
+
+        .day-badge {
+          background: #2563eb;
+          color: white;
+          font-size: 0.55rem;
+          font-weight: 700;
+          padding: 0.1rem 0.35rem;
+          border-radius: 0.35rem;
+          align-self: flex-end;
         }
       `}</style>
 
@@ -627,7 +753,7 @@ export default function App() {
 
         </div>
 
-        {/* Resumen por Mes */}
+        {/* Resumen por Mes (Habilitado para abrir el Calendario) */}
         <div className="month-summary-card">
           <div className="card-header" style={{ marginBottom: 0 }}>
             <Calendar size={18} style={{ color: '#38bdf8' }} />
@@ -636,20 +762,25 @@ export default function App() {
 
           {Object.keys(monthlySummary).length === 0 ? (
             <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1rem', textAlign: 'center' }}>
-              Cargue archivos XML para visualizar el total acumulado por cada mes.
+              Cargue archivos XML para visualizar el total acumulado y desplegar el calendario mensual.
             </p>
           ) : (
             <div className="month-grid">
-              {Object.entries(monthlySummary).map(([month, data]) => (
-                <div key={month} className="month-item">
-                  <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f1f5f9' }}>{month}</span>
+              {Object.values(monthlySummary).map((data) => (
+                <div key={data.key} className="month-item" onClick={() => handleOpenMonthCalendar(data)}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f1f5f9' }}>{data.name}</span>
+                    <ChevronRight size={16} style={{ color: '#60a5fa' }} />
+                  </div>
                   <div style={{ margin: '0.5rem 0' }}>
                     <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>Monto Acumulado:</span>
                     <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#34d399', fontFamily: 'monospace' }}>
                       ${data.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
                     </span>
                   </div>
-                  <span style={{ fontSize: '0.65rem', color: '#60a5fa' }}>{data.count} factura(s) procesada(s)</span>
+                  <span style={{ fontSize: '0.65rem', color: '#60a5fa', fontWeight: 500 }}>
+                    {data.count} factura(s) • Haz clic para ver días
+                  </span>
                 </div>
               ))}
             </div>
@@ -707,12 +838,12 @@ export default function App() {
                     <tr key={record.id}>
                       <td style={{ fontFamily: 'monospace', color: '#60a5fa', fontWeight: 600 }}>{record.folio}</td>
                       <td style={{ fontSize: '0.7rem', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
-                        <span style={{ display: 'flex', itemsAlign: 'center', gap: '0.25rem' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <Calendar size={12} style={{ color: '#60a5fa' }} /> {record.fecha ? new Date(record.fecha).toLocaleDateString('es-MX') : 'S/F'}
                         </span>
                       </td>
                       <td style={{ fontSize: '0.7rem', color: '#38bdf8', whiteSpace: 'nowrap' }}>
-                        <span style={{ display: 'flex', itemsAlign: 'center', gap: '0.25rem' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <Clock size={12} /> {record.fechaCarga || 'N/A'}
                         </span>
                       </td>
@@ -741,7 +872,104 @@ export default function App() {
         </div>
       </main>
 
-      {/* MODAL 1: EDICIÓN */}
+      {/* MODAL 1: CALENDARIO INTERACTIVO DEL MES */}
+      {selectedMonthModal && (
+        <div className="modal-overlay">
+          <div className="modal-body" style={{ maxWidth: '650px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', pb: '0.75rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Calendar size={20} style={{ color: '#38bdf8' }} /> Calendario de {selectedMonthModal.name}
+                </h3>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: '#94a3b8' }}>
+                  Seleccione un día para ver las facturas agregadas con su fecha y hora.
+                </p>
+              </div>
+              <button onClick={() => setSelectedMonthModal(null)} className="action-btn"><X size={18} /></button>
+            </div>
+
+            {selectedMonthModal.key === 'sin-fecha' ? (
+              <p style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '1rem 0' }}>
+                Los registros de este bloque no cuentan con una fecha de emisión válida registrada en el XML.
+              </p>
+            ) : monthCalendarGrid && (
+              <>
+                {/* Cuadrícula del mes */}
+                <div className="calendar-grid">
+                  {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
+                    <div key={d} className="calendar-day-header">{d}</div>
+                  ))}
+
+                  {/* Celdas vacías al inicio de mes */}
+                  {Array.from({ length: monthCalendarGrid.firstDayIndex }).map((_, idx) => (
+                    <div key={`empty-${idx}`} style={{ opacity: 0.2 }} />
+                  ))}
+
+                  {/* Días del mes */}
+                  {Array.from({ length: monthCalendarGrid.daysInMonth }).map((_, idx) => {
+                    const dayNum = idx + 1;
+                    const dayRecords = monthCalendarGrid.daysData[dayNum] || [];
+                    const hasData = dayRecords.length > 0;
+                    const isSelected = selectedDayDetails === dayNum;
+
+                    return (
+                      <div 
+                        key={`day-${dayNum}`} 
+                        className={`calendar-day-cell ${hasData ? 'active-has-data' : ''} ${isSelected ? 'selected-day' : ''}`}
+                        onClick={() => hasData ? setSelectedDayDetails(dayNum) : null}
+                        style={{ cursor: hasData ? 'pointer' : 'default', opacity: hasData ? 1 : 0.4 }}
+                      >
+                        <span className="day-number">{dayNum}</span>
+                        {hasData && (
+                          <span className="day-badge">{dayRecords.length} XML</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Detalle de facturas del día seleccionado */}
+                {selectedDayDetails && (
+                  <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(15,23,42,0.9)', borderRadius: '0.75rem', border: '1px solid rgba(59,130,246,0.3)' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Clock size={15} /> Facturas del día {selectedDayDetails} de {selectedMonthModal.name}
+                    </h4>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
+                      {monthCalendarGrid.daysData[selectedDayDetails]?.map((rec) => (
+                        <div key={rec.id} style={{ background: 'rgba(30,41,59,0.7)', padding: '0.6rem 0.75rem', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                          <div>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f8fafc' }}>
+                              Folio: <span style={{ fontFamily: 'monospace', color: '#60a5fa' }}>{rec.folio}</span> — {rec.emisorNombre}
+                            </div>
+                            <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                              Concepto: {rec.concepto}
+                            </div>
+                            <div style={{ fontSize: '0.65rem', color: '#38bdf8', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <Clock size={11} /> Carga al sistema: {rec.fechaCarga || 'N/A'}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#34d399', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: '0.75rem' }}>
+                            ${rec.total.toFixed(2)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+              <button onClick={() => setSelectedMonthModal(null)} className="btn-excel" style={{ background: '#334155', border: '1px solid rgba(255,255,255,0.1)' }}>
+                Cerrar Calendario
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: EDICIÓN DE FACTURA */}
       {editingRecord && (
         <div className="modal-overlay">
           <div className="modal-body">
@@ -839,7 +1067,7 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 2: EXPORTACIÓN */}
+      {/* MODAL 3: EXPORTACIÓN */}
       {showExportModal && (
         <div className="modal-overlay">
           <div className="modal-body">
