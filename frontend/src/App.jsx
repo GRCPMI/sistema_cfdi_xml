@@ -1,15 +1,24 @@
 // frontend/src/App.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Upload, FileSpreadsheet, Camera, Search, Layers, FileText, 
   UserCheck, ShieldCheck, CheckCircle2, Sparkles, Edit3, Trash2, 
-  X, Filter, Download, Save, Calendar, Clock, ChevronRight
+  X, Filter, Download, Save, Calendar, Clock, ChevronRight, RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function App() {
-  const [xmlRecords, setXmlRecords] = useState([]);
-  const [ineData, setIneData] = useState({ curp: '', claveElector: '', nombreBeneficiario: '' });
+  // 1. Inicializar estados obteniendo los datos guardados en localStorage
+  const [xmlRecords, setXmlRecords] = useState(() => {
+    const saved = localStorage.getItem('xmlRecords');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [ineData, setIneData] = useState(() => {
+    const saved = localStorage.getItem('ineData');
+    return saved ? JSON.parse(saved) : { curp: '', claveElector: '', nombreBeneficiario: '' };
+  });
+
   const [loadingXml, setLoadingXml] = useState(false);
   const [loadingIne, setLoadingIne] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -27,7 +36,26 @@ export default function App() {
   const [selectedMonthModal, setSelectedMonthModal] = useState(null);
   const [selectedDayDetails, setSelectedDayDetails] = useState(null);
 
-  // 1. Carga XML
+  // 2. useEffect para sincronizar los cambios con localStorage automáticamente
+  useEffect(() => {
+    localStorage.setItem('xmlRecords', JSON.stringify(xmlRecords));
+  }, [xmlRecords]);
+
+  useEffect(() => {
+    localStorage.setItem('ineData', JSON.stringify(ineData));
+  }, [ineData]);
+
+  // Función opcional para limpiar la sesión si deseas empezar de cero
+  const handleClearSession = () => {
+    if (window.confirm('¿Desea borrar todos los datos guardados localmente y reiniciar la sesión?')) {
+      localStorage.removeItem('xmlRecords');
+      localStorage.removeItem('ineData');
+      setXmlRecords([]);
+      setIneData({ curp: '', claveElector: '', nombreBeneficiario: '' });
+    }
+  };
+
+  // Carga XML
   const handleXmlUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -54,7 +82,7 @@ export default function App() {
     }
   };
 
-  // 2. OCR INE
+  // OCR INE
   const handleIneScan = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -83,7 +111,7 @@ export default function App() {
     }
   };
 
-  // 3. Modificación y Borrado
+  // Modificación y Borrado
   const handleDeleteRecord = (id) => {
     if (window.confirm('¿Está seguro de eliminar este comprobante de la lista?')) {
       setXmlRecords(prev => prev.filter(item => item.id !== id));
@@ -96,7 +124,7 @@ export default function App() {
     setEditingRecord(null);
   };
 
-  // 4. Agrupación y Cálculo Mensual
+  // Agrupación y Cálculo Mensual
   const monthlySummary = useMemo(() => {
     const summary = {};
     xmlRecords.forEach(record => {
@@ -131,13 +159,11 @@ export default function App() {
     return summary;
   }, [xmlRecords]);
 
-  // Abrir Modal de Calendario del Mes seleccionado
   const handleOpenMonthCalendar = (monthData) => {
     setSelectedMonthModal(monthData);
     setSelectedDayDetails(null);
   };
 
-  // Datos calculados para la cuadrícula del calendario
   const monthCalendarGrid = useMemo(() => {
     if (!selectedMonthModal || selectedMonthModal.key === 'sin-fecha') return null;
 
@@ -163,7 +189,7 @@ export default function App() {
     return { daysInMonth, firstDayIndex, daysData };
   }, [selectedMonthModal]);
 
-  // 5. Exportación a Excel
+  // Exportación a Excel
   const executeExport = () => {
     let dataToExport = [...xmlRecords];
 
@@ -276,6 +302,12 @@ export default function App() {
           margin: 0.15rem 0 0 0;
         }
 
+        .header-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
         .btn-excel {
           background: #059669;
           color: white;
@@ -295,6 +327,27 @@ export default function App() {
         .btn-excel:hover {
           background: #047857;
           transform: translateY(-1px);
+        }
+
+        .btn-clear {
+          background: #ffffff;
+          color: #64748b;
+          border: 1px solid #cbd5e1;
+          padding: 0.625rem 1rem;
+          border-radius: 0.5rem;
+          font-weight: 600;
+          font-size: 0.85rem;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .btn-clear:hover {
+          background: #f1f5f9;
+          color: #dc2626;
+          border-color: #fca5a5;
         }
 
         .main-container {
@@ -588,7 +641,6 @@ export default function App() {
           background: #eff6ff;
         }
 
-        /* Estilos del Calendario Claro */
         .calendar-grid {
           display: grid;
           grid-template-columns: repeat(7, 1fr);
@@ -661,13 +713,21 @@ export default function App() {
             </div>
             <div>
               <h1 className="brand-title">EXTRACTOR XML</h1>
-              <p className="brand-subtitle">Procesamiento de CFDI </p>
+              <p className="brand-subtitle">Procesamiento de CFDI 4.0 & Identificación OCR para Casa de Gestión</p>
             </div>
           </div>
-          <button onClick={() => setShowExportModal(true)} className="btn-excel">
-            <FileSpreadsheet size={18} />
-            Exportar Reporte Excel (.xlsx)
-          </button>
+          <div className="header-actions">
+            {xmlRecords.length > 0 && (
+              <button onClick={handleClearSession} className="btn-clear" title="Reiniciar Sesión">
+                <RotateCcw size={16} />
+                Limpiar Datos
+              </button>
+            )}
+            <button onClick={() => setShowExportModal(true)} className="btn-excel">
+              <FileSpreadsheet size={18} />
+              Exportar Reporte Excel (.xlsx)
+            </button>
+          </div>
         </div>
       </header>
 
@@ -742,7 +802,7 @@ export default function App() {
                 <h2 className="card-title">Métricas de Control</h2>
               </div>
               <p className="card-desc">
-                Conteo total de comprobantes procesados en la sesión.
+                Conteo total de comprobantes procesados guardados localmente.
               </p>
             </div>
 
@@ -752,7 +812,7 @@ export default function App() {
               </span>
               <div className="metric-number">{xmlRecords.length}</div>
               <span style={{ fontSize: '0.7rem', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                <CheckCircle2 size={13} /> Registros listos
+                <CheckCircle2 size={13} /> Persistencia activada
               </span>
             </div>
           </div>
