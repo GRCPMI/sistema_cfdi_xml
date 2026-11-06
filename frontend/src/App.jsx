@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Upload, FileSpreadsheet, Camera, Search, Layers, FileText, 
   UserCheck, ShieldCheck, CheckCircle2, Edit3, Trash2, 
-  X, Filter, Download, Save, Calendar, Clock, ChevronRight, RotateCcw
+  X, Filter, Download, Save, Calendar, Clock, ChevronRight, RotateCcw, User
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -19,11 +19,17 @@ export default function App() {
     return saved ? JSON.parse(saved) : { curp: '', claveElector: '', nombreBeneficiario: '' };
   });
 
+  // Lista de expedientes de INE guardados
+  const [ineList, setIneList] = useState(() => {
+    const saved = localStorage.getItem('ineList');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [loadingXml, setLoadingXml] = useState(false);
   const [loadingIne, setLoadingIne] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Estado para Edición
+  // Estado para Edición XML
   const [editingRecord, setEditingRecord] = useState(null);
 
   // Estado para Opciones de Exportación
@@ -45,12 +51,18 @@ export default function App() {
     localStorage.setItem('ineData', JSON.stringify(ineData));
   }, [ineData]);
 
+  useEffect(() => {
+    localStorage.setItem('ineList', JSON.stringify(ineList));
+  }, [ineList]);
+
   // Función para reiniciar sesión
   const handleClearSession = () => {
     if (window.confirm('¿Desea borrar todos los datos guardados localmente y reiniciar la sesión?')) {
       localStorage.removeItem('xmlRecords');
       localStorage.removeItem('ineData');
+      localStorage.removeItem('ineList');
       setXmlRecords([]);
+      setIneList([]);
       setIneData({ curp: '', claveElector: '', nombreBeneficiario: '' });
     }
   };
@@ -82,92 +94,69 @@ export default function App() {
     }
   };
 
-  // Función auxiliar para corregir la rotación de la foto vertical a horizontal
-  const processImageOrientation = (file) => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      img.onload = () => {
-        // Si la imagen es más alta que ancha (vertical), la rotamos 270 grados (o 90 a la izquierda)
-        if (img.height > img.width) {
-          const canvas = document.createElement('canvas');
-          canvas.width = img.height;
-          canvas.height = img.width;
-          const ctx = canvas.getContext('2d');
-          
-          ctx.translate(0, img.width);
-          ctx.rotate(-90 * Math.PI / 180);
-          ctx.drawImage(img, 0, 0);
-
-          canvas.toBlob((blob) => {
-            const rotatedFile = new File([blob], file.name, { type: file.type });
-            resolve(rotatedFile);
-          }, file.type);
-        } else {
-          resolve(file); // Ya está horizontal
-        }
-      };
-    });
-  };
-
-  // OCR INE con Autocorrección de Orientación
+  // OCR INE con guardado automático en lista
   const handleIneScan = async (e) => {
-    const originalFile = e.target.files[0];
-    if (!originalFile) return;
+    const file = e.target.files[0];
+    if (!file) return;
 
     setLoadingIne(true);
+    const formData = new FormData();
+    formData.append('ineImage', file);
 
     try {
-      // 1. Orientar la imagen correctamente antes de enviar
-      const fileToUpload = await processImageOrientation(originalFile);
-
-      const formData = new FormData();
-      formData.append('ineImage', fileToUpload);
-
-      // 2. Enviar la imagen orientada al backend
       const response = await fetch('http://localhost:5000/api/ine/scan', {
         method: 'POST',
         body: formData,
       });
       const result = await response.json();
       
-      if (result.success && (result.ineData || result.data)) {
-        const rawData = result.ineData || result.data || {};
-
-        const cleanField = (val) => {
-          if (!val || typeof val !== 'string') return '';
-          if (val.trim().toUpperCase().includes('NO DETECTADO') || val.trim().toUpperCase().includes('NOT DETECTED')) {
-            return '';
-          }
-          return val.trim();
+      if (result.success && result.ineData) {
+        const newIne = {
+          id: Date.now(),
+          nombreBeneficiario: result.ineData.nombreBeneficiario || '',
+          curp: result.ineData.curp || '',
+          claveElector: result.ineData.claveElector || '',
+          fechaEscaneo: new Date().toLocaleString('es-MX')
         };
 
-        const extractedNombre = cleanField(rawData.nombreBeneficiario || rawData.nombre || rawData.beneficiario);
-        const extractedCurp = cleanField(rawData.curp || rawData.CURP);
-        const extractedClave = cleanField(rawData.claveElector || rawData.clave || rawData.claveElectoral);
+        setIneData(newIne);
+        setIneList((prev) => [newIne, ...prev]);
 
-        setIneData({
-          nombreBeneficiario: extractedNombre,
-          curp: extractedCurp,
-          claveElector: extractedClave
-        });
-
-        if (extractedCurp || extractedNombre || extractedClave) {
-          alert('¡Datos de la INE extraídos correctamente!');
-        } else {
-          alert('No se detectaron textos claros en la imagen. Puede ingresar los datos manualmente.');
-        }
+        alert('¡Credencial INE escaneada y registrada con éxito!');
       } else {
-        alert('No se pudieron extraer los datos. Verifique que la imagen sea clara.');
+        alert('No se pudieron extraer datos de la imagen.');
       }
     } catch (err) {
-      alert('Error de conexión con el backend durante el escaneo OCR.');
+      alert('Error de conexión con el backend durante el OCR.');
     } finally {
       setLoadingIne(false);
     }
   };
 
-  // Modificación y Borrado
+  // Agregar manualmente INE actual
+  const handleSaveManualIne = () => {
+    if (!ineData.nombreBeneficiario && !ineData.curp && !ineData.claveElector) {
+      alert('Ingrese al menos un dato del beneficiario para registrar.');
+      return;
+    }
+    const newIne = {
+      id: Date.now(),
+      nombreBeneficiario: ineData.nombreBeneficiario,
+      curp: ineData.curp,
+      claveElector: ineData.claveElector,
+      fechaEscaneo: new Date().toLocaleString('es-MX')
+    };
+    setIneList((prev) => [newIne, ...prev]);
+    alert('Beneficiario registrado en la tabla.');
+  };
+
+  const handleDeleteIne = (id) => {
+    if (window.confirm('¿Desea eliminar esta INE de la lista?')) {
+      setIneList((prev) => prev.filter((item) => item.id !== id));
+    }
+  };
+
+  // Modificación y Borrado de XML
   const handleDeleteRecord = (id) => {
     if (window.confirm('¿Está seguro de eliminar este comprobante de la lista?')) {
       setXmlRecords(prev => prev.filter(item => item.id !== id));
@@ -184,7 +173,7 @@ export default function App() {
   const monthlySummary = useMemo(() => {
     const summary = {};
     xmlRecords.forEach(record => {
-      const dateObj = new Date(record.fecha);
+      const dateObj = new Date(record.fechaEmision || record.fecha);
       const isValidDate = !isNaN(dateObj.getTime());
       
       const monthYearKey = isValidDate 
@@ -233,7 +222,7 @@ export default function App() {
     }
 
     records.forEach(rec => {
-      const recDate = new Date(rec.fecha);
+      const recDate = new Date(rec.fechaEmision || rec.fecha);
       if (!isNaN(recDate.getTime()) && recDate.getFullYear() === year && recDate.getMonth() === monthIndex) {
         const dayNum = recDate.getDate();
         if (daysData[dayNum]) {
@@ -258,9 +247,7 @@ export default function App() {
       dataToExport = xmlRecords.filter(r => 
         r.emisorNombre.toLowerCase().includes(term) ||
         r.concepto.toLowerCase().includes(term) ||
-        r.emisorRfc.toLowerCase().includes(term) ||
-        (ineData.curp && ineData.curp.toLowerCase().includes(term)) ||
-        (ineData.nombreBeneficiario && ineData.nombreBeneficiario.toLowerCase().includes(term))
+        r.emisorRfc.toLowerCase().includes(term)
       );
     }
 
@@ -271,8 +258,8 @@ export default function App() {
 
     const exportFormatted = dataToExport.map((item) => ({
       'Folio': item.folio,
-      'Fecha Emisión Factura': item.fecha,
-      'Fecha/Hora de Carga': item.fechaCarga || 'N/A',
+      'Fecha Emisión Factura': item.fechaEmision || item.fecha,
+      'Fecha/Hora de Carga': item.fechaExtraccion || item.fechaCarga || 'N/A',
       'RFC Emisor': item.emisorRfc,
       'Nombre Emisor': item.emisorNombre,
       'Concepto / Justificación': item.concepto,
@@ -291,7 +278,7 @@ export default function App() {
     setShowExportModal(false);
   };
 
-  // Buscador general
+  // Filtro de XML
   const filteredRecords = xmlRecords.filter(r => {
     const term = searchTerm.toLowerCase();
     return (
@@ -299,7 +286,6 @@ export default function App() {
       r.concepto.toLowerCase().includes(term) ||
       r.emisorRfc.toLowerCase().includes(term) ||
       (ineData.curp && ineData.curp.toLowerCase().includes(term)) ||
-      (ineData.claveElector && ineData.claveElector.toLowerCase().includes(term)) ||
       (ineData.nombreBeneficiario && ineData.nombreBeneficiario.toLowerCase().includes(term))
     );
   });
@@ -586,6 +572,7 @@ export default function App() {
           border: 1px solid #e2e8f0;
           border-radius: 0.75rem;
           padding: 1.5rem;
+          margin-bottom: 2rem;
           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
@@ -782,7 +769,7 @@ export default function App() {
             </div>
           </div>
           <div className="header-actions">
-            {(xmlRecords.length > 0 || ineData.curp || ineData.claveElector || ineData.nombreBeneficiario) && (
+            {(xmlRecords.length > 0 || ineList.length > 0 || ineData.curp || ineData.claveElector) && (
               <button onClick={handleClearSession} className="btn-clear" title="Reiniciar Sesión">
                 <RotateCcw size={16} />
                 Limpiar Datos
@@ -836,7 +823,7 @@ export default function App() {
             <div>
               <label className="btn-scan">
                 <Camera size={16} />
-                <span>{loadingIne ? 'Procesando / Orientando Foto...' : 'Tomar / Subir Foto INE'}</span>
+                <span>{loadingIne ? 'Procesando Foto...' : 'Tomar / Subir Foto INE'}</span>
                 <input type="file" accept="image/*" capture="environment" onChange={handleIneScan} style={{ display: 'none' }} />
               </label>
 
@@ -865,11 +852,17 @@ export default function App() {
                   className="input-field"
                   style={{ fontFamily: 'monospace' }}
                 />
+                <button 
+                  onClick={handleSaveManualIne}
+                  style={{ background: '#7e22ce', color: 'white', border: 'none', padding: '0.4rem', borderRadius: '0.375rem', fontSize: '0.75rem', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Registrar Beneficiario
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Métricas de Control */}
+          {/* Métricas de Control (Sin Advertencias de Pendiente) */}
           <div className="white-card">
             <div>
               <div className="card-header">
@@ -877,7 +870,7 @@ export default function App() {
                 <h2 className="card-title">Métricas de Control</h2>
               </div>
               <p className="card-desc">
-                Estado de la sesión y vinculación de expediente.
+                Conteo de registros procesados en la sesión activa.
               </p>
             </div>
 
@@ -886,9 +879,8 @@ export default function App() {
                 Comprobantes XML Cargados
               </span>
               <div className="metric-number">{xmlRecords.length}</div>
-              <span style={{ fontSize: '0.7rem', color: (ineData.curp || ineData.nombreBeneficiario) ? '#059669' : '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                <CheckCircle2 size={13} /> 
-                {(ineData.curp || ineData.nombreBeneficiario) ? 'Beneficiario Registrado' : 'INE Pendiente'}
+              <span style={{ fontSize: '0.7rem', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                <CheckCircle2 size={13} /> Expediente Sincronizado
               </span>
             </div>
           </div>
@@ -929,7 +921,58 @@ export default function App() {
           )}
         </div>
 
-        {/* Tabla Principal */}
+        {/* NUEVA TABLA 1: IDENTIFICACIONES INE / BENEFICIARIOS */}
+        <div className="table-card">
+          <div className="table-header-flex">
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <User size={18} style={{ color: '#7e22ce' }} /> Beneficiarios E Identificaciones INE ({ineList.length})
+              </h3>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                Expedientes de identificación validados por OCR o ingresados manualmente.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
+            <table className="custom-table">
+              <thead>
+                <tr>
+                  <th>Nombre del Beneficiario</th>
+                  <th>CURP</th>
+                  <th>Clave de Elector</th>
+                  <th>Fecha de Registro</th>
+                  <th style={{ textAlign: 'center' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ineList.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
+                      No se han escaneado ni registrado identificaciones de INE.
+                    </td>
+                  </tr>
+                ) : (
+                  ineList.map((item) => (
+                    <tr key={item.id}>
+                      <td style={{ fontWeight: 700, color: '#0f172a' }}>{item.nombreBeneficiario || 'N/A'}</td>
+                      <td style={{ fontFamily: 'monospace', color: '#2563eb' }}>{item.curp || 'N/A'}</td>
+                      <td style={{ fontFamily: 'monospace', color: '#475569' }}>{item.claveElector || 'N/A'}</td>
+                      <td style={{ fontSize: '0.7rem', color: '#64748b' }}>{item.fechaEscaneo || 'N/A'}</td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button className="action-btn delete" onClick={() => handleDeleteIne(item.id)} title="Eliminar INE">
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* TABLA 2: FACTURAS XML EXTRAÍDAS */}
         <div className="table-card">
           <div className="table-header-flex">
             <div>
@@ -937,9 +980,7 @@ export default function App() {
                 Facturas Extraídas ({filteredRecords.length})
               </h3>
               <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-                {ineData.nombreBeneficiario 
-                  ? `Titular: ${ineData.nombreBeneficiario} ${ineData.curp ? `(${ineData.curp})` : ''}`
-                  : 'Filtre por emisor, concepto, RFC o datos de la identificación.'}
+                Aparecen registradas la fecha de la factura y el momento exacto de carga al sistema.
               </p>
             </div>
 
@@ -947,7 +988,7 @@ export default function App() {
               <Search size={16} className="search-icon" />
               <input 
                 type="text" 
-                placeholder="Filtrar por emisor, RFC, CURP o nombre..." 
+                placeholder="Filtrar por emisor, RFC o concepto..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
@@ -974,7 +1015,7 @@ export default function App() {
                   <tr>
                     <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                       <FileText size={40} style={{ opacity: 0.3, margin: '0 auto 0.5rem auto', display: 'block' }} />
-                      No hay comprobantes XML cargados o coincidentes con la búsqueda.
+                      No hay comprobantes XML cargados.
                     </td>
                   </tr>
                 ) : (
@@ -983,12 +1024,12 @@ export default function App() {
                       <td style={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 600 }}>{record.folio}</td>
                       <td style={{ fontSize: '0.7rem', color: '#475569', whiteSpace: 'nowrap' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Calendar size={12} style={{ color: '#2563eb' }} /> {record.fecha ? new Date(record.fecha).toLocaleDateString('es-MX') : 'S/F'}
+                          <Calendar size={12} style={{ color: '#2563eb' }} /> {(record.fechaEmision || record.fecha) ? new Date(record.fechaEmision || record.fecha).toLocaleDateString('es-MX') : 'S/F'}
                         </span>
                       </td>
                       <td style={{ fontSize: '0.7rem', color: '#0284c7', whiteSpace: 'nowrap' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Clock size={12} /> {record.fechaCarga || 'N/A'}
+                          <Clock size={12} /> {record.fechaExtraccion || record.fechaCarga || 'N/A'}
                         </span>
                       </td>
                       <td style={{ fontFamily: 'monospace' }}>{record.emisorRfc}</td>
@@ -1086,7 +1127,7 @@ export default function App() {
                               Concepto: {rec.concepto}
                             </div>
                             <div style={{ fontSize: '0.65rem', color: '#0284c7', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <Clock size={11} /> Carga al sistema: {rec.fechaCarga || 'N/A'}
+                              <Clock size={11} /> Carga al sistema: {rec.fechaExtraccion || rec.fechaCarga || 'N/A'}
                             </div>
                           </div>
                           <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: '0.75rem' }}>
@@ -1133,8 +1174,8 @@ export default function App() {
                   <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Fecha de Emisión:</label>
                   <input 
                     type="text" 
-                    value={editingRecord.fecha} 
-                    onChange={(e) => setEditingRecord({...editingRecord, fecha: e.target.value})} 
+                    value={editingRecord.fechaEmision || editingRecord.fecha} 
+                    onChange={(e) => setEditingRecord({...editingRecord, fechaEmision: e.target.value, fecha: e.target.value})} 
                     className="input-field" 
                   />
                 </div>

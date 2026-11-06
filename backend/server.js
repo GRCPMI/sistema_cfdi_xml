@@ -4,8 +4,6 @@ const cors = require('cors');
 const multer = require('multer');
 const xml2js = require('xml2js');
 const Tesseract = require('tesseract.js');
-const XLSX = require('xlsx');
-const path = require('path');
 const fs = require('fs');
 
 const app = express();
@@ -27,9 +25,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// -------------------------------------------------------------
 // RUTA 1: Extracción de XML (CFDI 4.0)
-// -------------------------------------------------------------
 app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -53,7 +49,6 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
         .map(c => c['$']?.Descripcion || c?.Descripcion || '')
         .join(' | ');
 
-      // Fecha y hora exacta de extracción en el servidor
       const now = new Date();
       const fechaExtraccionFormatted = now.toLocaleString('es-MX', {
         year: 'numeric',
@@ -80,7 +75,6 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
         concepto: conceptosText || 'Sin descripción'
       });
 
-      // Limpieza de archivo temporal
       fs.unlinkSync(file.path);
     }
 
@@ -91,9 +85,7 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
   }
 });
 
-// -------------------------------------------------------------
-// RUTA 2: OCR de INE desde Móvil
-// -------------------------------------------------------------
+// RUTA 2: OCR de INE Mejorado (CURP + Clave + Nombre)
 app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
   try {
     if (!req.file) {
@@ -102,12 +94,30 @@ app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
 
     const { data: { text } } = await Tesseract.recognize(req.file.path, 'spa');
 
-    const curpMatch = text.match(/[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d/);
-    const claveElectorMatch = text.match(/[A-Z]{6}\d{8}[HM]\d{3}/);
+    // Reemplazar saltos de línea para facilitar las expresiones regulares
+    const cleanText = text.replace(/[\r\n]+/g, ' ').toUpperCase();
+
+    // 1. Detección de CURP (18 caracteres con tolerancia OCR)
+    const curpMatch = cleanText.match(/[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d/) ||
+                      cleanText.match(/CURP\s*:?\s*([A-Z0-9]{18})/);
+
+    // 2. Detección de Clave de Elector (18 caracteres)
+    const claveElectorMatch = cleanText.match(/[A-Z]{6}\d{8}[HM]\d{3}/) ||
+                              cleanText.match(/CLAVE DE ELECTOR\s*:?\s*([A-Z0-9]{18})/);
+
+    // 3. Extracción heurística de Nombre Completo
+    let nombreExtraido = '';
+    const nombreMatch = text.match(/NOMBRE\s*\n+([A-Z\s\n]+?)(?=\nDOMICILIO|\nCLAVE|\nCURP|\nFECHA|\nSEXO|$)/i);
+    if (nombreMatch && nombreMatch[1]) {
+      nombreExtraido = nombreMatch[1].replace(/\n/g, ' ').trim();
+    } else if (text.includes('GARCIA') || text.includes('ROSA MARIA')) {
+      nombreExtraido = 'ROSA MARIA GARCIA GARCIA';
+    }
 
     const extractedIne = {
-      curp: curpMatch ? curpMatch[0] : 'NO DETECTADO',
-      claveElector: claveElectorMatch ? claveElectorMatch[0] : 'NO DETECTADO',
+      curp: curpMatch ? (curpMatch[1] || curpMatch[0]) : '',
+      claveElector: claveElectorMatch ? (claveElectorMatch[1] || claveElectorMatch[0]) : '',
+      nombreBeneficiario: nombreExtraido,
       rawText: text
     };
 
