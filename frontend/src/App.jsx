@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Upload, FileSpreadsheet, Camera, Search, Layers, FileText, 
-  UserCheck, ShieldCheck, CheckCircle2, Sparkles, Edit3, Trash2, 
+  UserCheck, ShieldCheck, CheckCircle2, Edit3, Trash2, 
   X, Filter, Download, Save, Calendar, Clock, ChevronRight, RotateCcw
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -770,7 +770,7 @@ export default function App() {
 
             <div>
               <label className="btn-scan">
-                <Sparkles size={16} />
+                <Camera size={16} />
                 <span>{loadingIne ? 'Analizando...' : 'Tomar / Subir Foto INE'}</span>
                 <input type="file" accept="image/*" capture="environment" onChange={handleIneScan} style={{ display: 'none' }} />
               </label>
