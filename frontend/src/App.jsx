@@ -100,17 +100,7 @@ export default function App() {
   const monthlySummary = useMemo(() => {
     const summary = {};
     xmlRecords.forEach(record => {
-      // Normalizar fecha para evitar desfases de zona horaria
-      let dateObj;
-      if (typeof record.fecha === 'string' && record.fecha.includes('T')) {
-        dateObj = new Date(record.fecha);
-      } else if (typeof record.fecha === 'string' && record.fecha.includes('-')) {
-        const parts = record.fecha.split('-');
-        dateObj = new Date(parts[0], parts[1] - 1, parts[2].substring(0, 2));
-      } else {
-        dateObj = new Date(record.fecha);
-      }
-
+      const dateObj = new Date(record.fecha);
       const isValidDate = !isNaN(dateObj.getTime());
       
       const monthYearKey = isValidDate 
@@ -147,13 +137,11 @@ export default function App() {
     setSelectedDayDetails(null);
   };
 
-  // Sincronización exacta de la cuadrícula con el calendario real del sistema
+  // Datos calculados para la cuadrícula del calendario
   const monthCalendarGrid = useMemo(() => {
     if (!selectedMonthModal || selectedMonthModal.key === 'sin-fecha') return null;
 
     const { year, monthIndex, records } = selectedMonthModal;
-    
-    // Obtener días totales y el día de la semana exacto del primer día del mes (0=Dom, 1=Lun...)
     const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     const firstDayIndex = new Date(year, monthIndex, 1).getDay();
 
@@ -163,16 +151,7 @@ export default function App() {
     }
 
     records.forEach(rec => {
-      let recDate;
-      if (typeof rec.fecha === 'string' && rec.fecha.includes('T')) {
-        recDate = new Date(rec.fecha);
-      } else if (typeof rec.fecha === 'string' && rec.fecha.includes('-')) {
-        const parts = rec.fecha.split('-');
-        recDate = new Date(parts[0], parts[1] - 1, parts[2].substring(0, 2));
-      } else {
-        recDate = new Date(rec.fecha);
-      }
-
+      const recDate = new Date(rec.fecha);
       if (!isNaN(recDate.getTime()) && recDate.getFullYear() === year && recDate.getMonth() === monthIndex) {
         const dayNum = recDate.getDate();
         if (daysData[dayNum]) {
@@ -238,21 +217,21 @@ export default function App() {
       <style>{`
         .app-viewport {
           min-height: 100vh;
-          background: radial-gradient(circle at top right, #1e1b4b 0%, #0f172a 40%, #020617 100%);
-          color: #f8fafc;
+          background-color: #f8fafc;
+          color: #1e293b;
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
           padding-bottom: 3rem;
         }
 
         .header-bar {
-          background: rgba(15, 23, 42, 0.75);
-          backdrop-filter: blur(12px);
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-          padding: 1.25rem 2rem;
+          background-color: #ffffff;
+          border-bottom: 1px solid #e2e8f0;
+          padding: 1rem 2rem;
           margin-bottom: 2rem;
           position: sticky;
           top: 0;
           z-index: 40;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
         .header-content {
@@ -272,40 +251,37 @@ export default function App() {
         }
 
         .icon-badge {
-          background: linear-gradient(135deg, rgba(59, 130, 246, 0.2) 0%, rgba(147, 51, 234, 0.2) 100%);
-          border: 1px solid rgba(99, 102, 241, 0.3);
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
           padding: 0.625rem;
           border-radius: 0.75rem;
-          color: #38bdf8;
+          color: #2563eb;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 0 15px rgba(56, 189, 248, 0.15);
         }
 
         .brand-title {
-          font-size: 1.35rem;
+          font-size: 1.25rem;
           font-weight: 800;
           letter-spacing: -0.02em;
-          background: linear-gradient(to right, #ffffff, #93c5fd);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+          color: #0f172a;
           margin: 0;
           text-transform: uppercase;
         }
 
         .brand-subtitle {
           font-size: 0.75rem;
-          color: #94a3b8;
+          color: #64748b;
           margin: 0.15rem 0 0 0;
         }
 
         .btn-excel {
-          background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+          background: #059669;
           color: white;
-          border: 1px solid rgba(16, 185, 129, 0.4);
+          border: none;
           padding: 0.625rem 1.25rem;
-          border-radius: 0.625rem;
+          border-radius: 0.5rem;
           font-weight: 600;
           font-size: 0.85rem;
           display: flex;
@@ -313,12 +289,12 @@ export default function App() {
           gap: 0.5rem;
           cursor: pointer;
           transition: all 0.2s ease;
-          box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
+          box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
         }
 
         .btn-excel:hover {
-          transform: translateY(-2px);
-          filter: brightness(1.08);
+          background: #047857;
+          transform: translateY(-1px);
         }
 
         .main-container {
@@ -334,16 +310,15 @@ export default function App() {
           margin-bottom: 2rem;
         }
 
-        .glass-card {
-          background: rgba(30, 41, 59, 0.6);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 1rem;
+        .white-card {
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
           padding: 1.5rem;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
         .card-header {
@@ -352,7 +327,7 @@ export default function App() {
           gap: 0.625rem;
           padding-bottom: 0.75rem;
           margin-bottom: 0.75rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          border-bottom: 1px solid #f1f5f9;
         }
 
         .card-title {
@@ -360,21 +335,21 @@ export default function App() {
           font-weight: 700;
           letter-spacing: 0.05em;
           text-transform: uppercase;
-          color: #e2e8f0;
+          color: #334155;
           margin: 0;
         }
 
         .card-desc {
           font-size: 0.75rem;
-          color: #94a3b8;
+          color: #64748b;
           margin-bottom: 1.25rem;
           line-height: 1.4;
         }
 
         .drop-zone {
-          border: 2px dashed rgba(99, 102, 241, 0.3);
-          background: rgba(15, 23, 42, 0.4);
-          border-radius: 0.75rem;
+          border: 2px dashed #cbd5e1;
+          background: #f8fafc;
+          border-radius: 0.625rem;
           padding: 1.75rem 1rem;
           display: flex;
           flex-direction: column;
@@ -386,17 +361,17 @@ export default function App() {
         }
 
         .drop-zone:hover {
-          border-color: #38bdf8;
-          background: rgba(56, 189, 248, 0.05);
+          border-color: #2563eb;
+          background: #eff6ff;
         }
 
         .btn-scan {
           width: 100%;
-          background: linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(79, 70, 229, 0.2) 100%);
-          border: 1px solid rgba(168, 85, 247, 0.4);
-          color: #c084fc;
+          background: #faf5ff;
+          border: 1px solid #e9d5ff;
+          color: #7e22ce;
           padding: 0.75rem;
-          border-radius: 0.625rem;
+          border-radius: 0.5rem;
           font-size: 0.8rem;
           font-weight: 600;
           display: flex;
@@ -404,6 +379,11 @@ export default function App() {
           justify-content: center;
           gap: 0.5rem;
           cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .btn-scan:hover {
+          background: #f3e8ff;
         }
 
         .input-group {
@@ -415,19 +395,26 @@ export default function App() {
 
         .input-field {
           width: 100%;
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 0.5rem;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 0.375rem;
           padding: 0.5rem 0.75rem;
           font-size: 0.75rem;
-          color: #f1f5f9;
+          color: #0f172a;
           font-family: monospace;
+          box-sizing: border-box;
+        }
+
+        .input-field:focus {
+          outline: none;
+          border-color: #2563eb;
+          box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
         }
 
         .metric-box {
-          background: rgba(15, 23, 42, 0.7);
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          border-radius: 0.875rem;
+          background: #f8fafc;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
           padding: 1.25rem;
           text-align: center;
           margin: auto 0;
@@ -435,22 +422,20 @@ export default function App() {
 
         .metric-number {
           font-size: 3rem;
-          font-weight: 900;
+          font-weight: 800;
           font-family: monospace;
-          background: linear-gradient(to bottom, #60a5fa, #2563eb);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+          color: #2563eb;
           line-height: 1;
           margin: 0.25rem 0;
         }
 
         .month-summary-card {
-          background: rgba(30, 41, 59, 0.6);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 1rem;
-          padding: 1.25rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
+          padding: 1.5rem;
           margin-bottom: 2rem;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
         .month-grid {
@@ -461,9 +446,9 @@ export default function App() {
         }
 
         .month-item {
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid rgba(59, 130, 246, 0.25);
-          border-radius: 0.75rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.625rem;
           padding: 1rem;
           display: flex;
           flex-direction: column;
@@ -473,17 +458,17 @@ export default function App() {
         }
 
         .month-item:hover {
-          border-color: #38bdf8;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 15px rgba(56, 189, 248, 0.15);
+          border-color: #2563eb;
+          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+          transform: translateY(-1px);
         }
 
         .table-card {
-          background: rgba(30, 41, 59, 0.6);
-          backdrop-filter: blur(16px);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 1rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
           padding: 1.5rem;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
 
         .table-header-flex {
@@ -502,12 +487,13 @@ export default function App() {
 
         .search-input {
           width: 100%;
-          background: rgba(15, 23, 42, 0.8);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 0.625rem;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 0.5rem;
           padding: 0.5rem 0.75rem 0.5rem 2.25rem;
           font-size: 0.75rem;
-          color: #f1f5f9;
+          color: #0f172a;
+          box-sizing: border-box;
         }
 
         .search-icon {
@@ -515,7 +501,7 @@ export default function App() {
           left: 0.75rem;
           top: 50%;
           transform: translateY(-50%);
-          color: #64748b;
+          color: #94a3b8;
         }
 
         .custom-table {
@@ -527,23 +513,23 @@ export default function App() {
         }
 
         .custom-table th {
-          background: rgba(15, 23, 42, 0.9);
-          color: #94a3b8;
+          background: #f8fafc;
+          color: #475569;
           text-transform: uppercase;
           font-size: 0.65rem;
           font-weight: 700;
           padding: 0.875rem 1rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          border-bottom: 1px solid #e2e8f0;
         }
 
         .custom-table td {
           padding: 0.875rem 1rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-          color: #cbd5e1;
+          border-bottom: 1px solid #f1f5f9;
+          color: #334155;
         }
 
         .custom-table tr:hover td {
-          background: rgba(51, 65, 85, 0.4);
+          background: #f8fafc;
         }
 
         .action-btn {
@@ -552,19 +538,20 @@ export default function App() {
           cursor: pointer;
           padding: 0.35rem;
           border-radius: 0.375rem;
+          transition: background 0.2s;
         }
 
-        .action-btn.edit { color: #60a5fa; }
-        .action-btn.edit:hover { background: rgba(96, 165, 250, 0.15); }
+        .action-btn.edit { color: #2563eb; }
+        .action-btn.edit:hover { background: #eff6ff; }
         
-        .action-btn.delete { color: #f87171; }
-        .action-btn.delete:hover { background: rgba(248, 113, 113, 0.15); }
+        .action-btn.delete { color: #dc2626; }
+        .action-btn.delete:hover { background: #fef2f2; }
 
         .modal-overlay {
           position: fixed;
           top: 0; left: 0; right: 0; bottom: 0;
-          background: rgba(2, 6, 23, 0.8);
-          backdrop-filter: blur(8px);
+          background: rgba(15, 23, 42, 0.4);
+          backdrop-filter: blur(4px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -573,13 +560,13 @@ export default function App() {
         }
 
         .modal-body {
-          background: #1e293b;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          border-radius: 1rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.75rem;
           width: 100%;
           max-width: 550px;
           padding: 1.5rem;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
           max-height: 90vh;
           overflow-y: auto;
         }
@@ -589,18 +576,19 @@ export default function App() {
           align-items: center;
           gap: 0.75rem;
           padding: 0.75rem;
-          background: rgba(15, 23, 42, 0.6);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
           border-radius: 0.5rem;
           cursor: pointer;
           margin-bottom: 0.5rem;
         }
 
         .radio-option.selected {
-          border-color: #3b82f6;
-          background: rgba(59, 130, 246, 0.1);
+          border-color: #2563eb;
+          background: #eff6ff;
         }
 
+        /* Estilos del Calendario Claro */
         .calendar-grid {
           display: grid;
           grid-template-columns: repeat(7, 1fr);
@@ -612,45 +600,45 @@ export default function App() {
           text-align: center;
           font-size: 0.65rem;
           font-weight: 700;
-          color: #94a3b8;
+          color: #64748b;
           padding: 0.25rem 0;
           text-transform: uppercase;
         }
 
         .calendar-day-cell {
-          background: rgba(15, 23, 42, 0.7);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 0.5rem;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 0.375rem;
           min-height: 48px;
           padding: 0.35rem;
           display: flex;
           flex-direction: column;
           justify-content: space-between;
           align-items: flex-start;
+          cursor: pointer;
           transition: all 0.2s ease;
-          position: relative;
+        }
+
+        .calendar-day-cell:hover {
+          border-color: #2563eb;
+          background: #f8fafc;
         }
 
         .calendar-day-cell.active-has-data {
-          border-color: rgba(56, 189, 248, 0.5);
-          background: rgba(56, 189, 248, 0.12);
-        }
-
-        .calendar-day-cell.active-has-data:hover {
-          background: rgba(56, 189, 248, 0.25);
-          border-color: #38bdf8;
+          border-color: #bfdbfe;
+          background: #eff6ff;
         }
 
         .calendar-day-cell.selected-day {
-          border-color: #10b981;
-          background: rgba(16, 185, 129, 0.2);
-          box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+          border-color: #059669;
+          background: #ecfdf5;
+          box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
         }
 
         .day-number {
           font-size: 0.7rem;
           font-weight: 600;
-          color: #e2e8f0;
+          color: #334155;
         }
 
         .day-badge {
@@ -659,7 +647,7 @@ export default function App() {
           font-size: 0.55rem;
           font-weight: 700;
           padding: 0.1rem 0.35rem;
-          border-radius: 0.35rem;
+          border-radius: 0.25rem;
           align-self: flex-end;
         }
       `}</style>
@@ -688,10 +676,10 @@ export default function App() {
         <div className="cards-grid">
           
           {/* Carga XML */}
-          <div className="glass-card">
+          <div className="white-card">
             <div>
               <div className="card-header">
-                <Upload size={18} style={{ color: '#60a5fa' }} />
+                <Upload size={18} style={{ color: '#2563eb' }} />
                 <h2 className="card-title">Carga Masiva XML</h2>
               </div>
               <p className="card-desc">
@@ -700,8 +688,8 @@ export default function App() {
             </div>
 
             <label className="drop-zone">
-              <FileText size={32} style={{ color: '#60a5fa', marginBottom: '0.5rem' }} />
-              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f1f5f9' }}>
+              <FileText size={32} style={{ color: '#2563eb', marginBottom: '0.5rem' }} />
+              <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
                 {loadingXml ? 'Procesando archivos...' : 'Examinar Comprobantes XML'}
               </span>
               <input type="file" multiple accept=".xml" onChange={handleXmlUpload} style={{ display: 'none' }} />
@@ -709,10 +697,10 @@ export default function App() {
           </div>
 
           {/* OCR INE */}
-          <div className="glass-card">
+          <div className="white-card">
             <div>
               <div className="card-header">
-                <Camera size={18} style={{ color: '#c084fc' }} />
+                <Camera size={18} style={{ color: '#7e22ce' }} />
                 <h2 className="card-title">Escaneo de INE (OCR)</h2>
               </div>
               <p className="card-desc">
@@ -747,10 +735,10 @@ export default function App() {
           </div>
 
           {/* Métricas */}
-          <div className="glass-card">
+          <div className="white-card">
             <div>
               <div className="card-header">
-                <Layers size={18} style={{ color: '#34d399' }} />
+                <Layers size={18} style={{ color: '#059669' }} />
                 <h2 className="card-title">Métricas de Control</h2>
               </div>
               <p className="card-desc">
@@ -759,11 +747,11 @@ export default function App() {
             </div>
 
             <div className="metric-box">
-              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#94a3b8', fontWeight: 600 }}>
+              <span style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: '#64748b', fontWeight: 600 }}>
                 Comprobantes XML Cargados
               </span>
               <div className="metric-number">{xmlRecords.length}</div>
-              <span style={{ fontSize: '0.7rem', color: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.7rem', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
                 <CheckCircle2 size={13} /> Registros listos
               </span>
             </div>
@@ -774,12 +762,12 @@ export default function App() {
         {/* Resumen por Mes */}
         <div className="month-summary-card">
           <div className="card-header" style={{ marginBottom: 0 }}>
-            <Calendar size={18} style={{ color: '#38bdf8' }} />
+            <Calendar size={18} style={{ color: '#2563eb' }} />
             <h2 className="card-title">Resumen de Facturación por Mes</h2>
           </div>
 
           {Object.keys(monthlySummary).length === 0 ? (
-            <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '1rem', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '1rem', textAlign: 'center' }}>
               Cargue archivos XML para visualizar el total acumulado y desplegar el calendario mensual.
             </p>
           ) : (
@@ -787,17 +775,17 @@ export default function App() {
               {Object.values(monthlySummary).map((data) => (
                 <div key={data.key} className="month-item" onClick={() => handleOpenMonthCalendar(data)}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f1f5f9' }}>{data.name}</span>
-                    <ChevronRight size={16} style={{ color: '#60a5fa' }} />
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>{data.name}</span>
+                    <ChevronRight size={16} style={{ color: '#2563eb' }} />
                   </div>
                   <div style={{ margin: '0.5rem 0' }}>
-                    <span style={{ fontSize: '0.65rem', color: '#94a3b8', display: 'block' }}>Monto Acumulado:</span>
-                    <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#34d399', fontFamily: 'monospace' }}>
+                    <span style={{ fontSize: '0.65rem', color: '#64748b', display: 'block' }}>Monto Acumulado:</span>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace' }}>
                       ${data.total.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN
                     </span>
                   </div>
-                  <span style={{ fontSize: '0.65rem', color: '#60a5fa', fontWeight: 500 }}>
-                    {data.count} factura(s) • Abrir Calendario
+                  <span style={{ fontSize: '0.65rem', color: '#2563eb', fontWeight: 600 }}>
+                    {data.count} factura(s) • Abrir calendario
                   </span>
                 </div>
               ))}
@@ -809,10 +797,10 @@ export default function App() {
         <div className="table-card">
           <div className="table-header-flex">
             <div>
-              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
                 Facturas Extraídas ({filteredRecords.length})
               </h3>
-              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
+              <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
                 Aparecen registradas la fecha de la factura y el momento exacto de carga al sistema.
               </p>
             </div>
@@ -829,7 +817,7 @@ export default function App() {
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto', borderRadius: '0.5rem', border: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ overflowX: 'auto', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
             <table className="custom-table">
               <thead>
                 <tr>
@@ -846,31 +834,31 @@ export default function App() {
               <tbody>
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
-                      <FileText size={40} style={{ opacity: 0.2, margin: '0 auto 0.5rem auto', display: 'block' }} />
+                    <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
+                      <FileText size={40} style={{ opacity: 0.3, margin: '0 auto 0.5rem auto', display: 'block' }} />
                       No hay comprobantes XML cargados.
                     </td>
                   </tr>
                 ) : (
                   filteredRecords.map((record) => (
                     <tr key={record.id}>
-                      <td style={{ fontFamily: 'monospace', color: '#60a5fa', fontWeight: 600 }}>{record.folio}</td>
-                      <td style={{ fontSize: '0.7rem', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 600 }}>{record.folio}</td>
+                      <td style={{ fontSize: '0.7rem', color: '#475569', whiteSpace: 'nowrap' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Calendar size={12} style={{ color: '#60a5fa' }} /> {record.fecha ? record.fecha.substring(0, 10) : 'S/F'}
+                          <Calendar size={12} style={{ color: '#2563eb' }} /> {record.fecha ? new Date(record.fecha).toLocaleDateString('es-MX') : 'S/F'}
                         </span>
                       </td>
-                      <td style={{ fontSize: '0.7rem', color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                      <td style={{ fontSize: '0.7rem', color: '#0284c7', whiteSpace: 'nowrap' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                           <Clock size={12} /> {record.fechaCarga || 'N/A'}
                         </span>
                       </td>
                       <td style={{ fontFamily: 'monospace' }}>{record.emisorRfc}</td>
-                      <td style={{ fontWeight: 600, color: '#f1f5f9' }}>{record.emisorNombre}</td>
-                      <td style={{ maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#94a3b8' }}>
+                      <td style={{ fontWeight: 600, color: '#0f172a' }}>{record.emisorNombre}</td>
+                      <td style={{ maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#64748b' }}>
                         {record.concepto}
                       </td>
-                      <td style={{ fontFamily: 'monospace', color: '#34d399', fontWeight: 700, textAlign: 'right', fontSize: '0.85rem' }}>
+                      <td style={{ fontFamily: 'monospace', color: '#059669', fontWeight: 700, textAlign: 'right', fontSize: '0.85rem' }}>
                         ${record.total.toFixed(2)}
                       </td>
                       <td style={{ textAlign: 'center' }}>
@@ -890,24 +878,24 @@ export default function App() {
         </div>
       </main>
 
-      {/* MODAL 1: CALENDARIO SINCRONIZADO DEL MES */}
+      {/* MODAL 1: CALENDARIO INTERACTIVO DEL MES */}
       {selectedMonthModal && (
         <div className="modal-overlay">
           <div className="modal-body" style={{ maxWidth: '650px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', pb: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Calendar size={20} style={{ color: '#38bdf8' }} /> Calendario de {selectedMonthModal.name}
+                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Calendar size={20} style={{ color: '#2563eb' }} /> Calendario de {selectedMonthModal.name}
                 </h3>
-                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: '#94a3b8' }}>
-                  Distribución real alineada con el calendario del sistema.
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: '#64748b' }}>
+                  Seleccione un día para ver las facturas agregadas con su fecha y hora.
                 </p>
               </div>
               <button onClick={() => setSelectedMonthModal(null)} className="action-btn"><X size={18} /></button>
             </div>
 
             {selectedMonthModal.key === 'sin-fecha' ? (
-              <p style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '1rem 0' }}>
+              <p style={{ fontSize: '0.75rem', color: '#64748b', padding: '1rem 0' }}>
                 Los registros de este bloque no cuentan con una fecha de emisión válida en el XML.
               </p>
             ) : monthCalendarGrid && (
@@ -917,12 +905,10 @@ export default function App() {
                     <div key={d} className="calendar-day-header">{d}</div>
                   ))}
 
-                  {/* Espacios vacíos exactos previos al día 1 del mes */}
                   {Array.from({ length: monthCalendarGrid.firstDayIndex }).map((_, idx) => (
-                    <div key={`empty-${idx}`} style={{ opacity: 0.1 }} />
+                    <div key={`empty-${idx}`} style={{ opacity: 0.2 }} />
                   ))}
 
-                  {/* Renderizado numérico de días */}
                   {Array.from({ length: monthCalendarGrid.daysInMonth }).map((_, idx) => {
                     const dayNum = idx + 1;
                     const dayRecords = monthCalendarGrid.daysData[dayNum] || [];
@@ -934,7 +920,7 @@ export default function App() {
                         key={`day-${dayNum}`} 
                         className={`calendar-day-cell ${hasData ? 'active-has-data' : ''} ${isSelected ? 'selected-day' : ''}`}
                         onClick={() => hasData ? setSelectedDayDetails(dayNum) : null}
-                        style={{ cursor: hasData ? 'pointer' : 'default', opacity: hasData ? 1 : 0.35 }}
+                        style={{ cursor: hasData ? 'pointer' : 'default', opacity: hasData ? 1 : 0.4 }}
                       >
                         <span className="day-number">{dayNum}</span>
                         {hasData && (
@@ -945,28 +931,27 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Detalle de facturas al hacer clic en un día */}
                 {selectedDayDetails && (
-                  <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(15,23,42,0.9)', borderRadius: '0.75rem', border: '1px solid rgba(59,130,246,0.3)' }}>
-                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Clock size={15} /> Facturas emitidas el día {selectedDayDetails} de {selectedMonthModal.name}
+                  <div style={{ marginTop: '1.25rem', padding: '1rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #cbd5e1' }}>
+                    <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#2563eb', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Clock size={15} /> Facturas del día {selectedDayDetails} de {selectedMonthModal.name}
                     </h4>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
                       {monthCalendarGrid.daysData[selectedDayDetails]?.map((rec) => (
-                        <div key={rec.id} style={{ background: 'rgba(30,41,59,0.7)', padding: '0.6rem 0.75rem', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div key={rec.id} style={{ background: '#ffffff', padding: '0.6rem 0.75rem', borderRadius: '0.375rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #e2e8f0' }}>
                           <div>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#f8fafc' }}>
-                              Folio: <span style={{ fontFamily: 'monospace', color: '#60a5fa' }}>{rec.folio}</span> — {rec.emisorNombre}
+                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0f172a' }}>
+                              Folio: <span style={{ fontFamily: 'monospace', color: '#2563eb' }}>{rec.folio}</span> — {rec.emisorNombre}
                             </div>
-                            <div style={{ fontSize: '0.65rem', color: '#94a3b8', marginTop: '0.15rem' }}>
+                            <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.15rem' }}>
                               Concepto: {rec.concepto}
                             </div>
-                            <div style={{ fontSize: '0.65rem', color: '#38bdf8', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <Clock size={11} /> Hora de carga: {rec.fechaCarga || 'N/A'}
+                            <div style={{ fontSize: '0.65rem', color: '#0284c7', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <Clock size={11} /> Carga al sistema: {rec.fechaCarga || 'N/A'}
                             </div>
                           </div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#34d399', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: '0.75rem' }}>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: '0.75rem' }}>
                             ${rec.total.toFixed(2)}
                           </div>
                         </div>
@@ -978,7 +963,7 @@ export default function App() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
-              <button onClick={() => setSelectedMonthModal(null)} className="btn-excel" style={{ background: '#334155', border: '1px solid rgba(255,255,255,0.1)' }}>
+              <button onClick={() => setSelectedMonthModal(null)} className="btn-excel" style={{ background: '#64748b' }}>
                 Cerrar Calendario
               </button>
             </div>
@@ -986,19 +971,19 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL 2: EDICIÓN */}
+      {/* MODAL 2: EDICIÓN DE FACTURA */}
       {editingRecord && (
         <div className="modal-overlay">
           <div className="modal-body">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc' }}>Editar Comprobante XML</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>Editar Comprobante XML</h3>
               <button onClick={() => setEditingRecord(null)} className="action-btn"><X size={18} /></button>
             </div>
             
             <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Folio:</label>
+                  <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Folio:</label>
                   <input 
                     type="text" 
                     value={editingRecord.folio} 
@@ -1007,7 +992,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Fecha de Emisión:</label>
+                  <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Fecha de Emisión:</label>
                   <input 
                     type="text" 
                     value={editingRecord.fecha} 
@@ -1018,7 +1003,7 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>RFC Emisor:</label>
+                <label style={{ fontSize: '0.7rem', color: '#64748b' }}>RFC Emisor:</label>
                 <input 
                   type="text" 
                   value={editingRecord.emisorRfc} 
@@ -1028,7 +1013,7 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Nombre / Razón Social Emisor:</label>
+                <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Nombre / Razón Social Emisor:</label>
                 <input 
                   type="text" 
                   value={editingRecord.emisorNombre} 
@@ -1038,7 +1023,7 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Concepto del Gasto:</label>
+                <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Concepto del Gasto:</label>
                 <textarea 
                   rows="3"
                   value={editingRecord.concepto} 
@@ -1050,7 +1035,7 @@ export default function App() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Subtotal ($):</label>
+                  <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Subtotal ($):</label>
                   <input 
                     type="number" 
                     step="0.01"
@@ -1060,7 +1045,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Total ($):</label>
+                  <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Total ($):</label>
                   <input 
                     type="number" 
                     step="0.01"
@@ -1075,7 +1060,7 @@ export default function App() {
                 <button type="submit" className="btn-excel" style={{ flex: 1, justifyContent: 'center' }}>
                   <Save size={16} /> Guardar Cambios
                 </button>
-                <button type="button" onClick={() => setEditingRecord(null)} className="action-btn" style={{ border: '1px solid rgba(255,255,255,0.1)', padding: '0.5rem 1rem' }}>
+                <button type="button" onClick={() => setEditingRecord(null)} className="action-btn" style={{ border: '1px solid #cbd5e1', padding: '0.5rem 1rem' }}>
                   Cancelar
                 </button>
               </div>
@@ -1088,14 +1073,14 @@ export default function App() {
       {showExportModal && (
         <div className="modal-overlay">
           <div className="modal-body">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Filter size={18} style={{ color: '#10b981' }} /> Opciones de Exportación
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Filter size={18} style={{ color: '#059669' }} /> Opciones de Exportación
               </h3>
               <button onClick={() => setShowExportModal(false)} className="action-btn"><X size={18} /></button>
             </div>
 
-            <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '1rem' }}>
+            <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '1rem' }}>
               Seleccione el criterio con el que desea generar la hoja de cálculo en Excel:
             </p>
 
@@ -1108,8 +1093,8 @@ export default function App() {
                   onChange={() => setExportOption('all')} 
                 />
                 <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f1f5f9' }}>Todos los XML ({xmlRecords.length})</div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Exporta la totalidad de facturas cargadas.</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a' }}>Todos los XML ({xmlRecords.length})</div>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Exporta la totalidad de facturas cargadas.</div>
                 </div>
               </label>
 
@@ -1121,8 +1106,8 @@ export default function App() {
                   onChange={() => setExportOption('filtered')} 
                 />
                 <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f1f5f9' }}>Facturas Filtradas Actuales ({filteredRecords.length})</div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Exporta únicamente el resultado del buscador.</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a' }}>Facturas Filtradas Actuales ({filteredRecords.length})</div>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Exporta únicamente el resultado del buscador.</div>
                 </div>
               </label>
 
@@ -1134,16 +1119,16 @@ export default function App() {
                   onChange={() => setExportOption('amountRange')} 
                 />
                 <div>
-                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#f1f5f9' }}>Filtrar por Rango de Montos ($)</div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Exporta sólo las facturas que estén dentro de un límite.</div>
+                  <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a' }}>Filtrar por Rango de Montos ($)</div>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Exporta sólo las facturas que estén dentro de un límite.</div>
                 </div>
               </label>
             </div>
 
             {exportOption === 'amountRange' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.75rem', background: 'rgba(15,23,42,0.8)', borderRadius: '0.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Monto Mínimo ($):</label>
+                  <label style={{ fontSize: '0.65rem', color: '#64748b' }}>Monto Mínimo ($):</label>
                   <input 
                     type="number" 
                     placeholder="0.00" 
@@ -1153,7 +1138,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: '#94a3b8' }}>Monto Máximo ($):</label>
+                  <label style={{ fontSize: '0.65rem', color: '#64748b' }}>Monto Máximo ($):</label>
                   <input 
                     type="number" 
                     placeholder="Sin límite" 
@@ -1169,7 +1154,7 @@ export default function App() {
               <button onClick={executeExport} className="btn-excel" style={{ flex: 1, justifyContent: 'center' }}>
                 <Download size={16} /> Generar Excel
               </button>
-              <button onClick={() => setShowExportModal(false)} className="action-btn" style={{ border: '1px solid rgba(255,255,255,0.1)', padding: '0.5rem 1rem' }}>
+              <button onClick={() => setShowExportModal(false)} className="action-btn" style={{ border: '1px solid #cbd5e1', padding: '0.5rem 1rem' }}>
                 Cancelar
               </button>
             </div>
