@@ -661,7 +661,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="brand-title">EXTRACTOR XML</h1>
-              <p className="brand-subtitle">Procesamiento de CFDI 4.0 & Identificación OCR para Casa de Gestión</p>
+              <p className="brand-subtitle">Procesamiento de CFDI </p>
             </div>
           </div>
           <button onClick={() => setShowExportModal(true)} className="btn-excel">
