@@ -36,7 +36,7 @@ export default function App() {
   const [selectedMonthModal, setSelectedMonthModal] = useState(null);
   const [selectedDayDetails, setSelectedDayDetails] = useState(null);
 
-  // 2. useEffect para sincronizar los cambios con localStorage automáticamente
+  // Sincronización con localStorage
   useEffect(() => {
     localStorage.setItem('xmlRecords', JSON.stringify(xmlRecords));
   }, [xmlRecords]);
@@ -82,16 +82,49 @@ export default function App() {
     }
   };
 
-  // OCR INE (PROCESAMIENTO TOLERANTE DE DATOS CORREGIDO)
+  // Función auxiliar para corregir la rotación de la foto vertical a horizontal
+  const processImageOrientation = (file) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = URL.createObjectURL(file);
+      img.onload = () => {
+        // Si la imagen es más alta que ancha (vertical), la rotamos 270 grados (o 90 a la izquierda)
+        if (img.height > img.width) {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.height;
+          canvas.height = img.width;
+          const ctx = canvas.getContext('2d');
+          
+          ctx.translate(0, img.width);
+          ctx.rotate(-90 * Math.PI / 180);
+          ctx.drawImage(img, 0, 0);
+
+          canvas.toBlob((blob) => {
+            const rotatedFile = new File([blob], file.name, { type: file.type });
+            resolve(rotatedFile);
+          }, file.type);
+        } else {
+          resolve(file); // Ya está horizontal
+        }
+      };
+    });
+  };
+
+  // OCR INE con Autocorrección de Orientación
   const handleIneScan = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const originalFile = e.target.files[0];
+    if (!originalFile) return;
 
     setLoadingIne(true);
-    const formData = new FormData();
-    formData.append('ineImage', file);
 
     try {
+      // 1. Orientar la imagen correctamente antes de enviar
+      const fileToUpload = await processImageOrientation(originalFile);
+
+      const formData = new FormData();
+      formData.append('ineImage', fileToUpload);
+
+      // 2. Enviar la imagen orientada al backend
       const response = await fetch('http://localhost:5000/api/ine/scan', {
         method: 'POST',
         body: formData,
@@ -101,7 +134,6 @@ export default function App() {
       if (result.success && (result.ineData || result.data)) {
         const rawData = result.ineData || result.data || {};
 
-        // Extraer valores o limpiar si el backend retornó "NO DETECTADO"
         const cleanField = (val) => {
           if (!val || typeof val !== 'string') return '';
           if (val.trim().toUpperCase().includes('NO DETECTADO') || val.trim().toUpperCase().includes('NOT DETECTED')) {
@@ -121,21 +153,21 @@ export default function App() {
         });
 
         if (extractedCurp || extractedNombre || extractedClave) {
-          alert('Datos extraídos de la foto correctamente.');
+          alert('¡Datos de la INE extraídos correctamente!');
         } else {
-          alert('No se detectaron textos claros en la imagen. Puede ingresar o corregir los datos manualmente.');
+          alert('No se detectaron textos claros en la imagen. Puede ingresar los datos manualmente.');
         }
       } else {
-        alert('No se pudo procesar la imagen. Ingrese los datos manualmente.');
+        alert('No se pudieron extraer los datos. Verifique que la imagen sea clara.');
       }
     } catch (err) {
-      alert('Error al comunicarse con el módulo OCR del servidor backend.');
+      alert('Error de conexión con el backend durante el escaneo OCR.');
     } finally {
       setLoadingIne(false);
     }
   };
 
-  // Modificación y Borrado de Registros
+  // Modificación y Borrado
   const handleDeleteRecord = (id) => {
     if (window.confirm('¿Está seguro de eliminar este comprobante de la lista?')) {
       setXmlRecords(prev => prev.filter(item => item.id !== id));
@@ -259,7 +291,7 @@ export default function App() {
     setShowExportModal(false);
   };
 
-  // Buscador de tabla (incluye búsqueda por emisor, concepto, RFC o datos del beneficiario INE)
+  // Buscador general
   const filteredRecords = xmlRecords.filter(r => {
     const term = searchTerm.toLowerCase();
     return (
@@ -789,7 +821,7 @@ export default function App() {
             </label>
           </div>
 
-          {/* OCR INE (ESCANEO E INPUTS EDITABLES) */}
+          {/* OCR INE */}
           <div className="white-card">
             <div>
               <div className="card-header">
@@ -804,7 +836,7 @@ export default function App() {
             <div>
               <label className="btn-scan">
                 <Camera size={16} />
-                <span>{loadingIne ? 'Procesando Imagen INE...' : 'Tomar / Subir Foto INE'}</span>
+                <span>{loadingIne ? 'Procesando / Orientando Foto...' : 'Tomar / Subir Foto INE'}</span>
                 <input type="file" accept="image/*" capture="environment" onChange={handleIneScan} style={{ display: 'none' }} />
               </label>
 
@@ -863,7 +895,7 @@ export default function App() {
 
         </div>
 
-        {/* Resumen de Facturación Mensual */}
+        {/* Resumen por Mes */}
         <div className="month-summary-card">
           <div className="card-header" style={{ marginBottom: 0 }}>
             <Calendar size={18} style={{ color: '#2563eb' }} />
