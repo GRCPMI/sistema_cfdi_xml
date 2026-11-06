@@ -82,7 +82,7 @@ export default function App() {
     }
   };
 
-  // OCR INE
+  // OCR INE (CORREGIDO Y VINCULADO)
   const handleIneScan = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -97,15 +97,24 @@ export default function App() {
         body: formData,
       });
       const result = await response.json();
-      if (result.success) {
-        setIneData((prev) => ({
-          ...prev,
-          curp: result.ineData.curp,
-          claveElector: result.ineData.claveElector,
-        }));
+      
+      if (result.success && result.ineData) {
+        const extractedCurp = result.ineData.curp || result.ineData.CURP || '';
+        const extractedClave = result.ineData.claveElector || result.ineData.clave || '';
+        const extractedNombre = result.ineData.nombreBeneficiario || result.ineData.nombre || '';
+
+        setIneData({
+          curp: extractedCurp,
+          claveElector: extractedClave,
+          nombreBeneficiario: extractedNombre
+        });
+
+        alert('¡Datos de la INE extraídos correctamente!');
+      } else {
+        alert('No se pudieron extraer automáticamente los datos de la imagen. Ingréselos manualmente.');
       }
     } catch (err) {
-      alert('Error de conexión con el módulo OCR de INE.');
+      alert('Error de conexión con el servidor de escaneo OCR.');
     } finally {
       setLoadingIne(false);
     }
@@ -189,7 +198,7 @@ export default function App() {
     return { daysInMonth, firstDayIndex, daysData };
   }, [selectedMonthModal]);
 
-  // Exportación a Excel
+  // Exportación a Excel (Incluye filtro mejorado de INE)
   const executeExport = () => {
     let dataToExport = [...xmlRecords];
 
@@ -198,10 +207,13 @@ export default function App() {
       const max = parseFloat(maxAmount) || Infinity;
       dataToExport = dataToExport.filter(r => r.total >= min && r.total <= max);
     } else if (exportOption === 'filtered') {
+      const term = searchTerm.toLowerCase();
       dataToExport = xmlRecords.filter(r => 
-        r.emisorNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.concepto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.emisorRfc.toLowerCase().includes(searchTerm.toLowerCase())
+        r.emisorNombre.toLowerCase().includes(term) ||
+        r.concepto.toLowerCase().includes(term) ||
+        r.emisorRfc.toLowerCase().includes(term) ||
+        (ineData.curp && ineData.curp.toLowerCase().includes(term)) ||
+        (ineData.nombreBeneficiario && ineData.nombreBeneficiario.toLowerCase().includes(term))
       );
     }
 
@@ -221,7 +233,7 @@ export default function App() {
       'Monto Total ($)': item.total,
       'CURP Beneficiario (INE)': ineData.curp || 'N/A',
       'Clave Elector (INE)': ineData.claveElector || 'N/A',
-      'Nombre Beneficiario': ineData.nombreBeneficiario || 'N/A'
+      'Nombre Beneficiario (INE)': ineData.nombreBeneficiario || 'N/A'
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportFormatted);
@@ -232,11 +244,17 @@ export default function App() {
     setShowExportModal(false);
   };
 
-  const filteredRecords = xmlRecords.filter(r => 
-    r.emisorNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.concepto.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.emisorRfc.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Buscador general (incluye búsqueda por datos INE)
+  const filteredRecords = xmlRecords.filter(r => {
+    const term = searchTerm.toLowerCase();
+    return (
+      r.emisorNombre.toLowerCase().includes(term) ||
+      r.concepto.toLowerCase().includes(term) ||
+      r.emisorRfc.toLowerCase().includes(term) ||
+      (ineData.curp && ineData.curp.toLowerCase().includes(term)) ||
+      (ineData.nombreBeneficiario && ineData.nombreBeneficiario.toLowerCase().includes(term))
+    );
+  });
 
   return (
     <div className="app-viewport">
@@ -717,7 +735,7 @@ export default function App() {
             </div>
           </div>
           <div className="header-actions">
-            {xmlRecords.length > 0 && (
+            {(xmlRecords.length > 0 || ineData.curp || ineData.claveElector) && (
               <button onClick={handleClearSession} className="btn-clear" title="Reiniciar Sesión">
                 <RotateCcw size={16} />
                 Limpiar Datos
@@ -756,7 +774,7 @@ export default function App() {
             </label>
           </div>
 
-          {/* OCR INE */}
+          {/* OCR INE (Campos Editables y Mapeados) */}
           <div className="white-card">
             <div>
               <div className="card-header">
@@ -764,18 +782,26 @@ export default function App() {
                 <h2 className="card-title">Escaneo de INE (OCR)</h2>
               </div>
               <p className="card-desc">
-                Cargue la imagen capturada para vincular los datos del beneficiario.
+                Cargue la imagen para vincular los datos del beneficiario.
               </p>
             </div>
 
             <div>
               <label className="btn-scan">
                 <Camera size={16} />
-                <span>{loadingIne ? 'Analizando...' : 'Tomar / Subir Foto INE'}</span>
+                <span>{loadingIne ? 'Analizando INE...' : 'Tomar / Subir Foto INE'}</span>
                 <input type="file" accept="image/*" capture="environment" onChange={handleIneScan} style={{ display: 'none' }} />
               </label>
 
               <div className="input-group">
+                <input 
+                  type="text" 
+                  placeholder="Nombre del Beneficiario" 
+                  value={ineData.nombreBeneficiario}
+                  onChange={(e) => setIneData({...ineData, nombreBeneficiario: e.target.value})}
+                  className="input-field"
+                  style={{ fontFamily: 'sans-serif', fontWeight: 600 }}
+                />
                 <input 
                   type="text" 
                   placeholder="CURP" 
@@ -802,7 +828,7 @@ export default function App() {
                 <h2 className="card-title">Métricas de Control</h2>
               </div>
               <p className="card-desc">
-                Conteo total de comprobantes procesados guardados localmente.
+                Estado del expediente y comprobantes listos para reporte.
               </p>
             </div>
 
@@ -811,8 +837,8 @@ export default function App() {
                 Comprobantes XML Cargados
               </span>
               <div className="metric-number">{xmlRecords.length}</div>
-              <span style={{ fontSize: '0.7rem', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                <CheckCircle2 size={13} /> Persistencia activada
+              <span style={{ fontSize: '0.7rem', color: ineData.curp ? '#059669' : '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                <CheckCircle2 size={13} /> {ineData.curp ? 'Beneficiario Vinculado' : 'Pendiente INE'}
               </span>
             </div>
           </div>
@@ -861,7 +887,9 @@ export default function App() {
                 Facturas Extraídas ({filteredRecords.length})
               </h3>
               <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-                Aparecen registradas la fecha de la factura y el momento exacto de carga al sistema.
+                {ineData.nombreBeneficiario 
+                  ? `Vinculadas a: ${ineData.nombreBeneficiario} (${ineData.curp || 'Sin CURP'})`
+                  : 'Filtre por emisor, concepto, RFC o datos del beneficiario.'}
               </p>
             </div>
 
@@ -869,7 +897,7 @@ export default function App() {
               <Search size={16} className="search-icon" />
               <input 
                 type="text" 
-                placeholder="Filtrar por emisor, RFC o concepto..." 
+                placeholder="Buscar por emisor, RFC, CURP o nombre..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
@@ -896,7 +924,7 @@ export default function App() {
                   <tr>
                     <td colSpan="8" style={{ textAlign: 'center', padding: '3rem', color: '#94a3b8' }}>
                       <FileText size={40} style={{ opacity: 0.3, margin: '0 auto 0.5rem auto', display: 'block' }} />
-                      No hay comprobantes XML cargados.
+                      No hay comprobantes XML cargados o coincidentes con la búsqueda.
                     </td>
                   </tr>
                 ) : (
