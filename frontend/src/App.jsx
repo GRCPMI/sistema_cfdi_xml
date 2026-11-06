@@ -24,24 +24,8 @@ export default function App() {
   const [maxAmount, setMaxAmount] = useState('');
 
   // Estado para Vista de Calendario por Mes
-  const [selectedMonthModal, setSelectedMonthModal] = useState(null); 
-  const [selectedDayDetails, setSelectedDayDetails] = useState(null); 
-
-  // Función auxiliar para parsear fechas de forma segura sin desfasar zonas horarias
-  const parseLocalDate = (dateStr) => {
-    if (!dateStr) return null;
-    const cleanStr = dateStr.toString().trim();
-    // Si la fecha viene como ISO string "2026-11-05T..." o "2026-11-05"
-    const match = cleanStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-    if (match) {
-      const year = parseInt(match[1], 10);
-      const month = parseInt(match[2], 10) - 1; // 0-indexed
-      const day = parseInt(match[3], 10);
-      return new Date(year, month, day);
-    }
-    const d = new Date(cleanStr);
-    return isNaN(d.getTime()) ? null : d;
-  };
+  const [selectedMonthModal, setSelectedMonthModal] = useState(null);
+  const [selectedDayDetails, setSelectedDayDetails] = useState(null);
 
   // 1. Carga XML
   const handleXmlUpload = async (e) => {
@@ -112,12 +96,22 @@ export default function App() {
     setEditingRecord(null);
   };
 
-  // 4. Agrupación y Cálculo Mensual según la fecha extraída de la factura
+  // 4. Agrupación y Cálculo Mensual
   const monthlySummary = useMemo(() => {
     const summary = {};
     xmlRecords.forEach(record => {
-      const dateObj = parseLocalDate(record.fecha);
-      const isValidDate = dateObj !== null;
+      // Normalizar fecha para evitar desfases de zona horaria
+      let dateObj;
+      if (typeof record.fecha === 'string' && record.fecha.includes('T')) {
+        dateObj = new Date(record.fecha);
+      } else if (typeof record.fecha === 'string' && record.fecha.includes('-')) {
+        const parts = record.fecha.split('-');
+        dateObj = new Date(parts[0], parts[1] - 1, parts[2].substring(0, 2));
+      } else {
+        dateObj = new Date(record.fecha);
+      }
+
+      const isValidDate = !isNaN(dateObj.getTime());
       
       const monthYearKey = isValidDate 
         ? `${dateObj.getFullYear()}-${dateObj.getMonth()}`
@@ -153,24 +147,33 @@ export default function App() {
     setSelectedDayDetails(null);
   };
 
-  // Mapeo preciso del calendario según el día exacto del mes de emisión de la factura
+  // Sincronización exacta de la cuadrícula con el calendario real del sistema
   const monthCalendarGrid = useMemo(() => {
     if (!selectedMonthModal || selectedMonthModal.key === 'sin-fecha') return null;
 
     const { year, monthIndex, records } = selectedMonthModal;
+    
+    // Obtener días totales y el día de la semana exacto del primer día del mes (0=Dom, 1=Lun...)
     const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-    const firstDayIndex = new Date(year, monthIndex, 1).getDay(); // 0 = Domingo, 4 = Jueves, etc.
+    const firstDayIndex = new Date(year, monthIndex, 1).getDay();
 
-    // Inicializar los días del mes
     const daysData = {};
     for (let day = 1; day <= daysInMonth; day++) {
       daysData[day] = [];
     }
 
-    // Clasificar facturas en su número de día exacto
     records.forEach(rec => {
-      const recDate = parseLocalDate(rec.fecha);
-      if (recDate && recDate.getFullYear() === year && recDate.getMonth() === monthIndex) {
+      let recDate;
+      if (typeof rec.fecha === 'string' && rec.fecha.includes('T')) {
+        recDate = new Date(rec.fecha);
+      } else if (typeof rec.fecha === 'string' && rec.fecha.includes('-')) {
+        const parts = rec.fecha.split('-');
+        recDate = new Date(parts[0], parts[1] - 1, parts[2].substring(0, 2));
+      } else {
+        recDate = new Date(rec.fecha);
+      }
+
+      if (!isNaN(recDate.getTime()) && recDate.getFullYear() === year && recDate.getMonth() === monthIndex) {
         const dayNum = recDate.getDate();
         if (daysData[dayNum]) {
           daysData[dayNum].push(rec);
@@ -598,7 +601,6 @@ export default function App() {
           background: rgba(59, 130, 246, 0.1);
         }
 
-        /* Estilos del Calendario */
         .calendar-grid {
           display: grid;
           grid-template-columns: repeat(7, 1fr);
@@ -626,6 +628,7 @@ export default function App() {
           justify-content: space-between;
           align-items: flex-start;
           transition: all 0.2s ease;
+          position: relative;
         }
 
         .calendar-day-cell.active-has-data {
@@ -633,20 +636,25 @@ export default function App() {
           background: rgba(56, 189, 248, 0.12);
         }
 
+        .calendar-day-cell.active-has-data:hover {
+          background: rgba(56, 189, 248, 0.25);
+          border-color: #38bdf8;
+        }
+
         .calendar-day-cell.selected-day {
           border-color: #10b981;
           background: rgba(16, 185, 129, 0.2);
-          box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+          box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
         }
 
         .day-number {
-          font-size: 0.75rem;
-          font-weight: 700;
+          font-size: 0.7rem;
+          font-weight: 600;
           color: #e2e8f0;
         }
 
         .day-badge {
-          background: linear-gradient(135deg, #2563eb, #3b82f6);
+          background: #2563eb;
           color: white;
           font-size: 0.55rem;
           font-weight: 700;
@@ -844,40 +852,37 @@ export default function App() {
                     </td>
                   </tr>
                 ) : (
-                  filteredRecords.map((record) => {
-                    const parsedDate = parseLocalDate(record.fecha);
-                    return (
-                      <tr key={record.id}>
-                        <td style={{ fontFamily: 'monospace', color: '#60a5fa', fontWeight: 600 }}>{record.folio}</td>
-                        <td style={{ fontSize: '0.7rem', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Calendar size={12} style={{ color: '#60a5fa' }} /> {parsedDate ? parsedDate.toLocaleDateString('es-MX') : 'S/F'}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '0.7rem', color: '#38bdf8', whiteSpace: 'nowrap' }}>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Clock size={12} /> {record.fechaCarga || 'N/A'}
-                          </span>
-                        </td>
-                        <td style={{ fontFamily: 'monospace' }}>{record.emisorRfc}</td>
-                        <td style={{ fontWeight: 600, color: '#f1f5f9' }}>{record.emisorNombre}</td>
-                        <td style={{ maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#94a3b8' }}>
-                          {record.concepto}
-                        </td>
-                        <td style={{ fontFamily: 'monospace', color: '#34d399', fontWeight: 700, textAlign: 'right', fontSize: '0.85rem' }}>
-                          ${record.total.toFixed(2)}
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          <button className="action-btn edit" onClick={() => setEditingRecord({...record})} title="Editar registro">
-                            <Edit3 size={15} />
-                          </button>
-                          <button className="action-btn delete" onClick={() => handleDeleteRecord(record.id)} title="Eliminar registro">
-                            <Trash2 size={15} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
+                  filteredRecords.map((record) => (
+                    <tr key={record.id}>
+                      <td style={{ fontFamily: 'monospace', color: '#60a5fa', fontWeight: 600 }}>{record.folio}</td>
+                      <td style={{ fontSize: '0.7rem', color: '#cbd5e1', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Calendar size={12} style={{ color: '#60a5fa' }} /> {record.fecha ? record.fecha.substring(0, 10) : 'S/F'}
+                        </span>
+                      </td>
+                      <td style={{ fontSize: '0.7rem', color: '#38bdf8', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Clock size={12} /> {record.fechaCarga || 'N/A'}
+                        </span>
+                      </td>
+                      <td style={{ fontFamily: 'monospace' }}>{record.emisorRfc}</td>
+                      <td style={{ fontWeight: 600, color: '#f1f5f9' }}>{record.emisorNombre}</td>
+                      <td style={{ maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#94a3b8' }}>
+                        {record.concepto}
+                      </td>
+                      <td style={{ fontFamily: 'monospace', color: '#34d399', fontWeight: 700, textAlign: 'right', fontSize: '0.85rem' }}>
+                        ${record.total.toFixed(2)}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button className="action-btn edit" onClick={() => setEditingRecord({...record})} title="Editar registro">
+                          <Edit3 size={15} />
+                        </button>
+                        <button className="action-btn delete" onClick={() => handleDeleteRecord(record.id)} title="Eliminar registro">
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -885,17 +890,17 @@ export default function App() {
         </div>
       </main>
 
-      {/* MODAL 1: CALENDARIO DE FACTURAS EMITIDAS */}
+      {/* MODAL 1: CALENDARIO SINCRONIZADO DEL MES */}
       {selectedMonthModal && (
         <div className="modal-overlay">
           <div className="modal-body" style={{ maxWidth: '650px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.08)', pb: '0.75rem' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Calendar size={20} style={{ color: '#38bdf8' }} /> Calendario de {selectedMonthModal.name}
                 </h3>
                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.7rem', color: '#94a3b8' }}>
-                  Las facturas se ubican en el día de emisión señalado en el XML.
+                  Distribución real alineada con el calendario del sistema.
                 </p>
               </div>
               <button onClick={() => setSelectedMonthModal(null)} className="action-btn"><X size={18} /></button>
@@ -903,22 +908,21 @@ export default function App() {
 
             {selectedMonthModal.key === 'sin-fecha' ? (
               <p style={{ fontSize: '0.75rem', color: '#94a3b8', padding: '1rem 0' }}>
-                Los registros de este bloque no cuentan con una fecha de emisión válida registrada en el XML.
+                Los registros de este bloque no cuentan con una fecha de emisión válida en el XML.
               </p>
             ) : monthCalendarGrid && (
               <>
-                {/* Cuadrícula de Días de la Semana */}
                 <div className="calendar-grid">
                   {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
                     <div key={d} className="calendar-day-header">{d}</div>
                   ))}
 
-                  {/* Espacios previos para alinear primer día */}
+                  {/* Espacios vacíos exactos previos al día 1 del mes */}
                   {Array.from({ length: monthCalendarGrid.firstDayIndex }).map((_, idx) => (
-                    <div key={`empty-${idx}`} style={{ opacity: 0.15 }} />
+                    <div key={`empty-${idx}`} style={{ opacity: 0.1 }} />
                   ))}
 
-                  {/* Días del mes */}
+                  {/* Renderizado numérico de días */}
                   {Array.from({ length: monthCalendarGrid.daysInMonth }).map((_, idx) => {
                     const dayNum = idx + 1;
                     const dayRecords = monthCalendarGrid.daysData[dayNum] || [];
@@ -941,11 +945,11 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Detalle del día exacto seleccionado */}
+                {/* Detalle de facturas al hacer clic en un día */}
                 {selectedDayDetails && (
                   <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'rgba(15,23,42,0.9)', borderRadius: '0.75rem', border: '1px solid rgba(59,130,246,0.3)' }}>
                     <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#38bdf8', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <Calendar size={15} /> Facturas emitidas el día {selectedDayDetails} de {selectedMonthModal.name}
+                      <Clock size={15} /> Facturas emitidas el día {selectedDayDetails} de {selectedMonthModal.name}
                     </h4>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
@@ -959,7 +963,7 @@ export default function App() {
                               Concepto: {rec.concepto}
                             </div>
                             <div style={{ fontSize: '0.65rem', color: '#38bdf8', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <Clock size={11} /> Carga al sistema: {rec.fechaCarga || 'N/A'}
+                              <Clock size={11} /> Hora de carga: {rec.fechaCarga || 'N/A'}
                             </div>
                           </div>
                           <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#34d399', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: '0.75rem' }}>
@@ -1003,7 +1007,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Fecha de Emisión (YYYY-MM-DD):</label>
+                  <label style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Fecha de Emisión:</label>
                   <input 
                     type="text" 
                     value={editingRecord.fecha} 
