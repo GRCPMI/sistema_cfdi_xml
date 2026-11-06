@@ -45,7 +45,7 @@ export default function App() {
     localStorage.setItem('ineData', JSON.stringify(ineData));
   }, [ineData]);
 
-  // Función opcional para limpiar la sesión si deseas empezar de cero
+  // Función para reiniciar sesión
   const handleClearSession = () => {
     if (window.confirm('¿Desea borrar todos los datos guardados localmente y reiniciar la sesión?')) {
       localStorage.removeItem('xmlRecords');
@@ -82,7 +82,7 @@ export default function App() {
     }
   };
 
-  // OCR INE (CORREGIDO Y VINCULADO)
+  // OCR INE (PROCESAMIENTO TOLERANTE DE DATOS CORREGIDO)
   const handleIneScan = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -98,29 +98,44 @@ export default function App() {
       });
       const result = await response.json();
       
-      if (result.success && result.ineData) {
-        const extractedCurp = result.ineData.curp || result.ineData.CURP || '';
-        const extractedClave = result.ineData.claveElector || result.ineData.clave || '';
-        const extractedNombre = result.ineData.nombreBeneficiario || result.ineData.nombre || '';
+      if (result.success && (result.ineData || result.data)) {
+        const rawData = result.ineData || result.data || {};
+
+        // Extraer valores o limpiar si el backend retornó "NO DETECTADO"
+        const cleanField = (val) => {
+          if (!val || typeof val !== 'string') return '';
+          if (val.trim().toUpperCase().includes('NO DETECTADO') || val.trim().toUpperCase().includes('NOT DETECTED')) {
+            return '';
+          }
+          return val.trim();
+        };
+
+        const extractedNombre = cleanField(rawData.nombreBeneficiario || rawData.nombre || rawData.beneficiario);
+        const extractedCurp = cleanField(rawData.curp || rawData.CURP);
+        const extractedClave = cleanField(rawData.claveElector || rawData.clave || rawData.claveElectoral);
 
         setIneData({
+          nombreBeneficiario: extractedNombre,
           curp: extractedCurp,
-          claveElector: extractedClave,
-          nombreBeneficiario: extractedNombre
+          claveElector: extractedClave
         });
 
-        alert('¡Datos de la INE extraídos correctamente!');
+        if (extractedCurp || extractedNombre || extractedClave) {
+          alert('Datos extraídos de la foto correctamente.');
+        } else {
+          alert('No se detectaron textos claros en la imagen. Puede ingresar o corregir los datos manualmente.');
+        }
       } else {
-        alert('No se pudieron extraer automáticamente los datos de la imagen. Ingréselos manualmente.');
+        alert('No se pudo procesar la imagen. Ingrese los datos manualmente.');
       }
     } catch (err) {
-      alert('Error de conexión con el servidor de escaneo OCR.');
+      alert('Error al comunicarse con el módulo OCR del servidor backend.');
     } finally {
       setLoadingIne(false);
     }
   };
 
-  // Modificación y Borrado
+  // Modificación y Borrado de Registros
   const handleDeleteRecord = (id) => {
     if (window.confirm('¿Está seguro de eliminar este comprobante de la lista?')) {
       setXmlRecords(prev => prev.filter(item => item.id !== id));
@@ -198,7 +213,7 @@ export default function App() {
     return { daysInMonth, firstDayIndex, daysData };
   }, [selectedMonthModal]);
 
-  // Exportación a Excel (Incluye filtro mejorado de INE)
+  // Exportación a Excel
   const executeExport = () => {
     let dataToExport = [...xmlRecords];
 
@@ -244,7 +259,7 @@ export default function App() {
     setShowExportModal(false);
   };
 
-  // Buscador general (incluye búsqueda por datos INE)
+  // Buscador de tabla (incluye búsqueda por emisor, concepto, RFC o datos del beneficiario INE)
   const filteredRecords = xmlRecords.filter(r => {
     const term = searchTerm.toLowerCase();
     return (
@@ -252,6 +267,7 @@ export default function App() {
       r.concepto.toLowerCase().includes(term) ||
       r.emisorRfc.toLowerCase().includes(term) ||
       (ineData.curp && ineData.curp.toLowerCase().includes(term)) ||
+      (ineData.claveElector && ineData.claveElector.toLowerCase().includes(term)) ||
       (ineData.nombreBeneficiario && ineData.nombreBeneficiario.toLowerCase().includes(term))
     );
   });
@@ -472,7 +488,6 @@ export default function App() {
           padding: 0.5rem 0.75rem;
           font-size: 0.75rem;
           color: #0f172a;
-          font-family: monospace;
           box-sizing: border-box;
         }
 
@@ -735,7 +750,7 @@ export default function App() {
             </div>
           </div>
           <div className="header-actions">
-            {(xmlRecords.length > 0 || ineData.curp || ineData.claveElector) && (
+            {(xmlRecords.length > 0 || ineData.curp || ineData.claveElector || ineData.nombreBeneficiario) && (
               <button onClick={handleClearSession} className="btn-clear" title="Reiniciar Sesión">
                 <RotateCcw size={16} />
                 Limpiar Datos
@@ -774,7 +789,7 @@ export default function App() {
             </label>
           </div>
 
-          {/* OCR INE (Campos Editables y Mapeados) */}
+          {/* OCR INE (ESCANEO E INPUTS EDITABLES) */}
           <div className="white-card">
             <div>
               <div className="card-header">
@@ -789,38 +804,40 @@ export default function App() {
             <div>
               <label className="btn-scan">
                 <Camera size={16} />
-                <span>{loadingIne ? 'Analizando INE...' : 'Tomar / Subir Foto INE'}</span>
+                <span>{loadingIne ? 'Procesando Imagen INE...' : 'Tomar / Subir Foto INE'}</span>
                 <input type="file" accept="image/*" capture="environment" onChange={handleIneScan} style={{ display: 'none' }} />
               </label>
 
               <div className="input-group">
                 <input 
                   type="text" 
-                  placeholder="Nombre del Beneficiario" 
+                  placeholder="Nombre Completo Beneficiario" 
                   value={ineData.nombreBeneficiario}
                   onChange={(e) => setIneData({...ineData, nombreBeneficiario: e.target.value})}
                   className="input-field"
-                  style={{ fontFamily: 'sans-serif', fontWeight: 600 }}
+                  style={{ fontWeight: 600 }}
                 />
                 <input 
                   type="text" 
-                  placeholder="CURP" 
+                  placeholder="CURP (18 Caracteres)" 
                   value={ineData.curp}
-                  onChange={(e) => setIneData({...ineData, curp: e.target.value})}
+                  onChange={(e) => setIneData({...ineData, curp: e.target.value.toUpperCase()})}
                   className="input-field"
+                  style={{ fontFamily: 'monospace' }}
                 />
                 <input 
                   type="text" 
-                  placeholder="Clave de Elector" 
+                  placeholder="Clave de Elector (18 Caracteres)" 
                   value={ineData.claveElector}
-                  onChange={(e) => setIneData({...ineData, claveElector: e.target.value})}
+                  onChange={(e) => setIneData({...ineData, claveElector: e.target.value.toUpperCase()})}
                   className="input-field"
+                  style={{ fontFamily: 'monospace' }}
                 />
               </div>
             </div>
           </div>
 
-          {/* Métricas */}
+          {/* Métricas de Control */}
           <div className="white-card">
             <div>
               <div className="card-header">
@@ -828,7 +845,7 @@ export default function App() {
                 <h2 className="card-title">Métricas de Control</h2>
               </div>
               <p className="card-desc">
-                Estado del expediente y comprobantes listos para reporte.
+                Estado de la sesión y vinculación de expediente.
               </p>
             </div>
 
@@ -837,15 +854,16 @@ export default function App() {
                 Comprobantes XML Cargados
               </span>
               <div className="metric-number">{xmlRecords.length}</div>
-              <span style={{ fontSize: '0.7rem', color: ineData.curp ? '#059669' : '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
-                <CheckCircle2 size={13} /> {ineData.curp ? 'Beneficiario Vinculado' : 'Pendiente INE'}
+              <span style={{ fontSize: '0.7rem', color: (ineData.curp || ineData.nombreBeneficiario) ? '#059669' : '#d97706', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', fontWeight: 600 }}>
+                <CheckCircle2 size={13} /> 
+                {(ineData.curp || ineData.nombreBeneficiario) ? 'Beneficiario Registrado' : 'INE Pendiente'}
               </span>
             </div>
           </div>
 
         </div>
 
-        {/* Resumen por Mes */}
+        {/* Resumen de Facturación Mensual */}
         <div className="month-summary-card">
           <div className="card-header" style={{ marginBottom: 0 }}>
             <Calendar size={18} style={{ color: '#2563eb' }} />
@@ -879,7 +897,7 @@ export default function App() {
           )}
         </div>
 
-        {/* Tabla de Resultados */}
+        {/* Tabla Principal */}
         <div className="table-card">
           <div className="table-header-flex">
             <div>
@@ -888,8 +906,8 @@ export default function App() {
               </h3>
               <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
                 {ineData.nombreBeneficiario 
-                  ? `Vinculadas a: ${ineData.nombreBeneficiario} (${ineData.curp || 'Sin CURP'})`
-                  : 'Filtre por emisor, concepto, RFC o datos del beneficiario.'}
+                  ? `Titular: ${ineData.nombreBeneficiario} ${ineData.curp ? `(${ineData.curp})` : ''}`
+                  : 'Filtre por emisor, concepto, RFC o datos de la identificación.'}
               </p>
             </div>
 
@@ -897,7 +915,7 @@ export default function App() {
               <Search size={16} className="search-icon" />
               <input 
                 type="text" 
-                placeholder="Buscar por emisor, RFC, CURP o nombre..." 
+                placeholder="Filtrar por emisor, RFC, CURP o nombre..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
