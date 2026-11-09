@@ -3,9 +3,10 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Upload, FileSpreadsheet, Camera, Search, Layers, FileText, 
   UserCheck, ShieldCheck, CheckCircle2, Edit3, Trash2, 
-  X, Filter, Download, Save, Calendar, Clock, ChevronRight, RotateCcw, User
+  X, Filter, Download, Save, Calendar, Clock, ChevronRight, RotateCcw, User, FolderArchive
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 
 export default function App() {
   // 1. Inicializar estados obteniendo los datos guardados en localStorage
@@ -27,6 +28,7 @@ export default function App() {
 
   const [loadingXml, setLoadingXml] = useState(false);
   const [loadingIne, setLoadingIne] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   // Estado para Edición XML
@@ -67,30 +69,80 @@ export default function App() {
     }
   };
 
-  // Carga XML
+  // CARGA MASIVA INTELIGENTE (Archivos XML sueltos, Carpetas o archivos .ZIP)
   const handleXmlUpload = async (e) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
     setLoadingXml(true);
-    const formData = new FormData();
-    for (let i = 0; i < files.length; i++) {
-      formData.append('xmlFiles', files[i]);
-    }
+    setUploadStatus('Analizando y filtrando archivos...');
+
+    const xmlFilesToUpload = [];
 
     try {
+      for (const file of files) {
+        // Caso A: Es un paquete comprimido .ZIP
+        if (file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
+          setUploadStatus(`Descomprimiendo paquete ZIP: ${file.name}...`);
+          const zip = new JSZip();
+          const unzippedContent = await zip.loadAsync(file);
+
+          for (const relativePath of Object.keys(unzippedContent.files)) {
+            const zipEntry = unzippedContent.files[relativePath];
+            // Filtrar carpetas y seleccionar solo archivos terminados en .xml (ignorando PDFs u otros)
+            if (!zipEntry.dir && relativePath.toLowerCase().endsWith('.xml')) {
+              const blob = await zipEntry.async('blob');
+              const cleanFileName = relativePath.split('/').pop() || 'comprobante.xml';
+              const xmlFile = new File([blob], cleanFileName, { type: 'text/xml' });
+              xmlFilesToUpload.push(xmlFile);
+            }
+          }
+        } 
+        // Caso B: Es un archivo individual XML (se descartan directamente los .pdf u otros formatos)
+        else if (file.name.toLowerCase().endsWith('.xml')) {
+          xmlFilesToUpload.push(file);
+        }
+      }
+
+      if (xmlFilesToUpload.length === 0) {
+        alert('No se encontraron comprobantes válidos con extensión .XML en la selección o en el paquete ZIP.');
+        setLoadingXml(false);
+        setUploadStatus('');
+        return;
+      }
+
+      setUploadStatus(`Enviando ${xmlFilesToUpload.length} archivo(s) XML al servidor...`);
+
+      const formData = new FormData();
+      xmlFilesToUpload.forEach((file) => {
+        formData.append('xmlFiles', file);
+      });
+
       const response = await fetch('http://localhost:5000/api/xml/parse', {
         method: 'POST',
         body: formData,
       });
+
       const result = await response.json();
       if (result.success) {
-        setXmlRecords((prev) => [...prev, ...result.data]);
+        // Evitar duplicados por UUID o Folio
+        setXmlRecords((prev) => {
+          const existingUuids = new Set(prev.map(item => item.uuid));
+          const newUniqueRecords = result.data.filter(item => !existingUuids.has(item.uuid) || item.uuid === 'N/A');
+          return [...prev, ...newUniqueRecords];
+        });
+        alert(`¡Carga masiva completada! Se procesaron ${result.data.length} comprobante(s) XML.`);
+      } else {
+        alert(result.error || 'Ocurrió un error al procesar el paquete en el servidor.');
       }
     } catch (err) {
-      alert('Asegúrate de que el servidor Backend (server.js) esté corriendo en el puerto 5000');
+      console.error(err);
+      alert('Error de conexión o fallo al leer los archivos subidos/ZIP.');
     } finally {
       setLoadingXml(false);
+      setUploadStatus('');
+      // Limpiar input file
+      e.target.value = '';
     }
   };
 
@@ -258,6 +310,7 @@ export default function App() {
 
     const exportFormatted = dataToExport.map((item) => ({
       'Folio': item.folio,
+      'UUID Fiscal': item.uuid || 'N/A',
       'Fecha Emisión Factura': item.fechaEmision || item.fecha,
       'Fecha/Hora de Carga': item.fechaExtraccion || item.fechaCarga || 'N/A',
       'RFC Emisor': item.emisorRfc,
@@ -764,8 +817,8 @@ export default function App() {
               <ShieldCheck size={26} />
             </div>
             <div>
-              <h1 className="brand-title">EXTRACTOR XML</h1>
-              <p className="brand-subtitle">Procesamiento de CFDI 4.0 & Identificación OCR para Casa de Gestión</p>
+              <h1 className="brand-title">EXTRACTOR XML MASIVO</h1>
+              <p className="brand-subtitle">Procesamiento CFDI 4.0 & Soporte .ZIP / Carpetas (1-1000+ Facturas)</p>
             </div>
           </div>
           <div className="header-actions">
@@ -787,24 +840,34 @@ export default function App() {
       <main className="main-container">
         <div className="cards-grid">
           
-          {/* Carga XML */}
+          {/* Carga Masiva XML & ZIP */}
           <div className="white-card">
             <div>
               <div className="card-header">
                 <Upload size={18} style={{ color: '#2563eb' }} />
-                <h2 className="card-title">Carga Masiva XML</h2>
+                <h2 className="card-title">Carga Masiva (1 - 1000+ XML)</h2>
               </div>
               <p className="card-desc">
-                Arrastre o seleccione los comprobantes fiscales (.xml) que desea incorporar al reporte.
+                Seleccione múltiples archivos XML, carpetas o paquetes <strong>.ZIP</strong>. Los archivos PDF e imágenes se filtrarán automáticamente.
               </p>
             </div>
 
             <label className="drop-zone">
-              <FileText size={32} style={{ color: '#2563eb', marginBottom: '0.5rem' }} />
+              <FolderArchive size={34} style={{ color: '#2563eb', marginBottom: '0.5rem' }} />
               <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#334155' }}>
-                {loadingXml ? 'Procesando archivos...' : 'Examinar Comprobantes XML'}
+                {loadingXml ? uploadStatus : 'Cargar Archivos XML o .ZIP'}
               </span>
-              <input type="file" multiple accept=".xml" onChange={handleXmlUpload} style={{ display: 'none' }} />
+              <span style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.2rem' }}>
+                Permite seleccionar hasta 1,000+ comprobantes en lote
+              </span>
+              <input 
+                type="file" 
+                multiple 
+                accept=".xml,.zip,application/zip,application/x-zip-compressed" 
+                onChange={handleXmlUpload} 
+                disabled={loadingXml}
+                style={{ display: 'none' }} 
+              />
             </label>
           </div>
 
@@ -862,7 +925,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Métricas de Control (Sin Advertencias de Pendiente) */}
+          {/* Métricas de Control */}
           <div className="white-card">
             <div>
               <div className="card-header">
@@ -896,7 +959,7 @@ export default function App() {
 
           {Object.keys(monthlySummary).length === 0 ? (
             <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '1rem', textAlign: 'center' }}>
-              Cargue archivos XML para visualizar el total acumulado y desplegar el calendario mensual.
+              Cargue archivos XML o paquetes .ZIP para visualizar el total acumulado y desplegar el calendario mensual.
             </p>
           ) : (
             <div className="month-grid">
@@ -921,7 +984,7 @@ export default function App() {
           )}
         </div>
 
-        {/* NUEVA TABLA 1: IDENTIFICACIONES INE / BENEFICIARIOS */}
+        {/* TABLA 1: IDENTIFICACIONES INE / BENEFICIARIOS */}
         <div className="table-card">
           <div className="table-header-flex">
             <div>
