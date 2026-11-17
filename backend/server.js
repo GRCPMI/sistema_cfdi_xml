@@ -4,6 +4,7 @@ const cors = require('cors');
 const multer = require('multer');
 const xml2js = require('xml2js');
 const Tesseract = require('tesseract.js');
+const sharp = require('sharp'); // <-- IMPORTACIÓN AGREGADA
 const fs = require('fs');
 
 const app = express();
@@ -102,13 +103,13 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
 
 // RUTA 2: OCR Completo de INE (Todos los campos y domicilio multilínea)
 app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No se subió ninguna imagen de INE.' });
+  }
+
+  const processedImagePath = req.file.path + '-processed.png';
+
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No se subió ninguna imagen de INE.' });
-    }
-
-    const processedImagePath = req.file.path + '-processed.png';
-
     // Preprocesamiento en Blanco y Negro (Threshold) para máxima precisión
     await sharp(req.file.path)
       .rotate()
@@ -146,7 +147,7 @@ app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
       claveElector = val.substring(0, 18);
     }
 
-    // 3. NOMBRE (Entre NOMBRE y DOMICILIO, filtrando ruido)
+    // 3. NOMBRE (Entre NOMBRE y DOMICILIO, filtrando ruido sin borrar apellidos con H o M)
     let nombreBeneficiario = '';
     const nombreIdx = lines.findIndex(l => l.toUpperCase().includes('NOMBRE') || l.toUpperCase().includes('NONBRE'));
     const domicilioIdx = lines.findIndex(l => l.toUpperCase().includes('DOMICILIO'));
@@ -154,25 +155,23 @@ app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
     if (nombreIdx !== -1 && domicilioIdx !== -1 && domicilioIdx > nombreIdx) {
       let fragmentosNombre = [];
       for (let i = nombreIdx + 1; i < domicilioIdx; i++) {
-        let linea = lines[i].toUpperCase();
-        if (linea.includes('SEXO') || linea.includes('H') || linea.includes('M') || linea.length <= 2) continue;
+        let linea = lines[i].toUpperCase().trim();
+        if (linea.includes('SEXO') || linea === 'H' || linea === 'M' || linea.length <= 2) continue;
         let limpia = linea.replace(/[^A-ZÁÉÍÓÚÑ\s]/g, ' ').replace(/\s+/g, ' ').trim();
         if (limpia.length > 3) fragmentosNombre.push(limpia);
       }
       nombreBeneficiario = fragmentosNombre.join(' ');
     }
 
-    // 4. DOMICILIO (Con los 3 saltos de línea solicitados: Calle/Colonia, CP, Localidad/Estado)
+    // 4. DOMICILIO (Con hasta 3 saltos de línea: Calle/Colonia, CP, Localidad/Estado)
     let domicilio = '';
     if (domicilioIdx !== -1) {
       let lineasDomicilio = [];
-      // Tomamos hasta 3 líneas debajo de la etiqueta DOMICILIO
       for (let i = domicilioIdx + 1; i <= domicilioIdx + 3 && i < lines.length; i++) {
         let lDom = lines[i];
         if (lDom.toUpperCase().includes('CLAVE') || lDom.toUpperCase().includes('CURP') || lDom.toUpperCase().includes('AÑO')) break;
         if (lDom.length > 2) lineasDomicilio.push(lDom);
       }
-      // Unimos las líneas usando saltos de línea explícitos (\n) simulando el formato de la credencial
       domicilio = lineasDomicilio.join('\n');
     }
 
@@ -183,35 +182,34 @@ app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
       fechaNacimiento = fechaMatch[0];
     }
 
-    // 6. AÑO DE REGISTRO (4 dígitos numéricos generalmente asociados al año)
+    // 6. AÑO DE REGISTRO
     let anioRegistro = '';
     const anioMatch = cleanText.match(/AÑO DE REGISTRO\s*(\d{4})/i) || cleanText.match(/\b(19|20)\d{2}\b/);
     if (anioMatch) {
       anioRegistro = anioMatch[1] || anioMatch[0];
     }
 
-    // 7. SECCIÓN (4 dígitos numéricos)
+    // 7. SECCIÓN
     let seccion = '';
     const seccionMatch = cleanText.match(/SECCION\s*(\d{4})/i) || cleanText.match(/\b\d{4}\b/g)?.find(s => s !== anioRegistro);
     if (seccionMatch) {
       seccion = seccionMatch[1] || seccionMatch;
     }
 
-    // 8. VIGENCIA (Rango de años como 2020-2030)
+    // 8. VIGENCIA
     let vigencia = '';
     const vigenciaMatch = cleanText.match(/\d{4}\s*-\s*\d{4}/);
     if (vigenciaMatch) {
       vigencia = vigenciaMatch[0].replace(/\s/g, '');
     }
 
-    // 9. SEXO (H o M)
+    // 9. SEXO
     let sexo = '';
     const sexoMatch = cleanText.match(/SEXO\s*([HM])/i) || cleanText.match(/\b([HM])\b/g);
     if (sexoMatch) {
       sexo = sexoMatch[1] || (Array.isArray(sexoMatch) ? sexoMatch[0] : '');
     }
 
-    // Objeto consolidado con todos los campos solicitados
     const extractedIne = {
       nombreBeneficiario: nombreBeneficiario || '',
       domicilio: domicilio || '',
@@ -225,13 +223,13 @@ app.post('/api/ine/scan', upload.single('ineImage'), async (req, res) => {
       rawText: text
     };
 
-    fs.unlinkSync(req.file.path);
-    if (fs.existsSync(processedImagePath)) fs.unlinkSync(processedImagePath);
-
     res.json({ success: true, ineData: extractedIne });
   } catch (error) {
     console.error('Error en OCR Completo:', error);
     res.status(500).json({ error: 'Error al procesar todos los campos de la credencial INE.' });
+  } finally {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    if (fs.existsSync(processedImagePath)) fs.unlinkSync(processedImagePath);
   }
 });
 
