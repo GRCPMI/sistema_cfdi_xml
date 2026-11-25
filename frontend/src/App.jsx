@@ -221,6 +221,19 @@ export default function App() {
     setEditingRecord(null);
   };
 
+  // Helper para formatear conceptos en listas limpias (soporta tanto arreglos como texto con "|")
+  const getConceptosLista = (record) => {
+    if (Array.isArray(record.conceptosDetalle) && record.conceptosDetalle.length > 0) {
+      return record.conceptosDetalle.map(
+        (c) => `${c.descripcion}${c.importe ? ` ($${Number(c.importe).toFixed(2)})` : ''}`
+      );
+    }
+    if (typeof record.concepto === 'string' && record.concepto.includes(' | ')) {
+      return record.concepto.split(' | ').map((s) => s.trim()).filter(Boolean);
+    }
+    return [record.concepto || 'Sin descripción'];
+  };
+
   // Agrupación y Cálculo Mensual
   const monthlySummary = useMemo(() => {
     const summary = {};
@@ -308,20 +321,28 @@ export default function App() {
       return;
     }
 
-    const exportFormatted = dataToExport.map((item) => ({
-      'Folio': item.folio,
-      'UUID Fiscal': item.uuid || 'N/A',
-      'Fecha Emisión Factura': item.fechaEmision || item.fecha,
-      'Fecha/Hora de Carga': item.fechaExtraccion || item.fechaCarga || 'N/A',
-      'RFC Emisor': item.emisorRfc,
-      'Nombre Emisor': item.emisorNombre,
-      'Concepto / Justificación': item.concepto,
-      'Monto Subtotal ($)': item.subtotal,
-      'Monto Total ($)': item.total,
-      'CURP Beneficiario (INE)': ineData.curp || 'N/A',
-      'Clave Elector (INE)': ineData.claveElector || 'N/A',
-      'Nombre Beneficiario (INE)': ineData.nombreBeneficiario || 'N/A'
-    }));
+    const exportFormatted = dataToExport.map((item) => {
+      const listaConceptos = getConceptosLista(item);
+      const conceptosExcel = listaConceptos.length > 1
+        ? listaConceptos.map((c, idx) => `${idx + 1}. ${c.replace(/^\d+\.\s*/, '')}`).join('\n')
+        : listaConceptos[0];
+
+      return {
+        'Folio': item.folio,
+        'UUID Fiscal': item.uuid || 'N/A',
+        'Fecha Emisión Factura': item.fechaEmision || item.fecha,
+        'Fecha/Hora de Carga': item.fechaExtraccion || item.fechaCarga || 'N/A',
+        'RFC Emisor': item.emisorRfc,
+        'Nombre Emisor': item.emisorNombre,
+        'Total Conceptos': listaConceptos.length,
+        'Concepto / Justificación': conceptosExcel,
+        'Monto Subtotal ($)': item.subtotal,
+        'Monto Total ($)': item.total,
+        'CURP Beneficiario (INE)': ineData.curp || 'N/A',
+        'Clave Elector (INE)': ineData.claveElector || 'N/A',
+        'Nombre Beneficiario (INE)': ineData.nombreBeneficiario || 'N/A'
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(exportFormatted);
     const workbook = XLSX.utils.book_new();
@@ -684,10 +705,46 @@ export default function App() {
           padding: 0.875rem 1rem;
           border-bottom: 1px solid #f1f5f9;
           color: #334155;
+          vertical-align: top;
         }
 
         .custom-table tr:hover td {
           background: #f8fafc;
+        }
+
+        .conceptos-list-box {
+          display: flex;
+          flex-direction: column;
+          gap: 0.35rem;
+          min-width: 240px;
+          max-width: 380px;
+          white-space: normal;
+          line-height: 1.35;
+        }
+
+        .concepto-badge-count {
+          display: inline-block;
+          background: #eff6ff;
+          color: #1d4ed8;
+          border: 1px solid #bfdbfe;
+          font-size: 0.62rem;
+          font-weight: 700;
+          padding: 0.1rem 0.45rem;
+          border-radius: 9999px;
+          width: fit-content;
+          margin-bottom: 0.15rem;
+        }
+
+        .concepto-item-line {
+          font-size: 0.73rem;
+          color: #334155;
+          padding-bottom: 0.25rem;
+          border-bottom: 1px dashed #e2e8f0;
+        }
+
+        .concepto-item-line:last-child {
+          border-bottom: none;
+          padding-bottom: 0;
         }
 
         .action-btn {
@@ -1043,7 +1100,7 @@ export default function App() {
                 Facturas Extraídas ({filteredRecords.length})
               </h3>
               <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-                Aparecen registradas la fecha de la factura y el momento exacto de carga al sistema.
+                Aparecen registradas la fecha de la factura, todos los conceptos incluidos y el momento de carga al sistema.
               </p>
             </div>
 
@@ -1068,7 +1125,7 @@ export default function App() {
                   <th>Fecha/Hora Carga</th>
                   <th>RFC Emisor</th>
                   <th>Nombre / Razón Social</th>
-                  <th>Concepto del Gasto</th>
+                  <th>Conceptos del Gasto</th>
                   <th style={{ textAlign: 'right' }}>Total ($)</th>
                   <th style={{ textAlign: 'center' }}>Acciones</th>
                 </tr>
@@ -1082,37 +1139,53 @@ export default function App() {
                     </td>
                   </tr>
                 ) : (
-                  filteredRecords.map((record) => (
-                    <tr key={record.id}>
-                      <td style={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 600 }}>{record.folio}</td>
-                      <td style={{ fontSize: '0.7rem', color: '#475569', whiteSpace: 'nowrap' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Calendar size={12} style={{ color: '#2563eb' }} /> {(record.fechaEmision || record.fecha) ? new Date(record.fechaEmision || record.fecha).toLocaleDateString('es-MX') : 'S/F'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '0.7rem', color: '#0284c7', whiteSpace: 'nowrap' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Clock size={12} /> {record.fechaExtraccion || record.fechaCarga || 'N/A'}
-                        </span>
-                      </td>
-                      <td style={{ fontFamily: 'monospace' }}>{record.emisorRfc}</td>
-                      <td style={{ fontWeight: 600, color: '#0f172a' }}>{record.emisorNombre}</td>
-                      <td style={{ maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#64748b' }}>
-                        {record.concepto}
-                      </td>
-                      <td style={{ fontFamily: 'monospace', color: '#059669', fontWeight: 700, textAlign: 'right', fontSize: '0.85rem' }}>
-                        ${record.total.toFixed(2)}
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <button className="action-btn edit" onClick={() => setEditingRecord({...record})} title="Editar registro">
-                          <Edit3 size={15} />
-                        </button>
-                        <button className="action-btn delete" onClick={() => handleDeleteRecord(record.id)} title="Eliminar registro">
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  filteredRecords.map((record) => {
+                    const listaConceptos = getConceptosLista(record);
+                    return (
+                      <tr key={record.id}>
+                        <td style={{ fontFamily: 'monospace', color: '#2563eb', fontWeight: 600 }}>{record.folio}</td>
+                        <td style={{ fontSize: '0.7rem', color: '#475569', whiteSpace: 'nowrap' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Calendar size={12} style={{ color: '#2563eb' }} /> {(record.fechaEmision || record.fecha) ? new Date(record.fechaEmision || record.fecha).toLocaleDateString('es-MX') : 'S/F'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '0.7rem', color: '#0284c7', whiteSpace: 'nowrap' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Clock size={12} /> {record.fechaExtraccion || record.fechaCarga || 'N/A'}
+                          </span>
+                        </td>
+                        <td style={{ fontFamily: 'monospace' }}>{record.emisorRfc}</td>
+                        <td style={{ fontWeight: 600, color: '#0f172a' }}>{record.emisorNombre}</td>
+                        <td>
+                          <div className="conceptos-list-box">
+                            {listaConceptos.length > 1 && (
+                              <span className="concepto-badge-count">
+                                {listaConceptos.length} conceptos incluidos
+                              </span>
+                            )}
+                            {listaConceptos.map((conceptoItem, idx) => (
+                              <div key={idx} className="concepto-item-line">
+                                {listaConceptos.length > 1 && !/^\d+\./.test(conceptoItem)
+                                  ? `${idx + 1}. ${conceptoItem}`
+                                  : conceptoItem}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td style={{ fontFamily: 'monospace', color: '#059669', fontWeight: 700, textAlign: 'right', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                          ${record.total.toFixed(2)}
+                        </td>
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                          <button className="action-btn edit" onClick={() => setEditingRecord({...record})} title="Editar registro">
+                            <Edit3 size={15} />
+                          </button>
+                          <button className="action-btn delete" onClick={() => handleDeleteRecord(record.id)} title="Eliminar registro">
+                            <Trash2 size={15} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1179,25 +1252,33 @@ export default function App() {
                       <Clock size={15} /> Facturas del día {selectedDayDetails} de {selectedMonthModal.name}
                     </h4>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
-                      {monthCalendarGrid.daysData[selectedDayDetails]?.map((rec) => (
-                        <div key={rec.id} style={{ background: '#ffffff', padding: '0.6rem 0.75rem', borderRadius: '0.375rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #e2e8f0' }}>
-                          <div>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0f172a' }}>
-                              Folio: <span style={{ fontFamily: 'monospace', color: '#2563eb' }}>{rec.folio}</span> — {rec.emisorNombre}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '220px', overflowY: 'auto' }}>
+                      {monthCalendarGrid.daysData[selectedDayDetails]?.map((rec) => {
+                        const listaConceptosDia = getConceptosLista(rec);
+                        return (
+                          <div key={rec.id} style={{ background: '#ffffff', padding: '0.6rem 0.75rem', borderRadius: '0.375rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', border: '1px solid #e2e8f0' }}>
+                            <div>
+                              <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#0f172a' }}>
+                                Folio: <span style={{ fontFamily: 'monospace', color: '#2563eb' }}>{rec.folio}</span> — {rec.emisorNombre}
+                              </div>
+                              <div style={{ fontSize: '0.65rem', color: '#475569', marginTop: '0.2rem' }}>
+                                <strong>Conceptos ({listaConceptosDia.length}):</strong>
+                                <ul style={{ margin: '0.2rem 0 0 1rem', padding: 0 }}>
+                                  {listaConceptosDia.map((c, idx) => (
+                                    <li key={idx}>{c.replace(/^\d+\.\s*/, '')}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                              <div style={{ fontSize: '0.65rem', color: '#0284c7', marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <Clock size={11} /> Carga al sistema: {rec.fechaExtraccion || rec.fechaCarga || 'N/A'}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '0.15rem' }}>
-                              Concepto: {rec.concepto}
-                            </div>
-                            <div style={{ fontSize: '0.65rem', color: '#0284c7', marginTop: '0.15rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              <Clock size={11} /> Carga al sistema: {rec.fechaExtraccion || rec.fechaCarga || 'N/A'}
+                            <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: '0.75rem' }}>
+                              ${rec.total.toFixed(2)}
                             </div>
                           </div>
-                          <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#059669', fontFamily: 'monospace', whiteSpace: 'nowrap', marginLeft: '0.75rem' }}>
-                            ${rec.total.toFixed(2)}
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1265,13 +1346,20 @@ export default function App() {
               </div>
 
               <div>
-                <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Concepto del Gasto:</label>
+                <label style={{ fontSize: '0.7rem', color: '#64748b' }}>Conceptos del Gasto (separados por " | "):</label>
                 <textarea 
-                  rows="3"
+                  rows="4"
                   value={editingRecord.concepto} 
-                  onChange={(e) => setEditingRecord({...editingRecord, concepto: e.target.value})} 
+                  onChange={(e) => {
+                    const nuevoTexto = e.target.value;
+                    setEditingRecord({
+                      ...editingRecord,
+                      concepto: nuevoTexto,
+                      conceptosDetalle: nuevoTexto.split(' | ').map(desc => ({ descripcion: desc.trim() })).filter(c => c.descripcion)
+                    });
+                  }} 
                   className="input-field" 
-                  style={{ resize: 'none' }}
+                  style={{ resize: 'vertical' }}
                 />
               </div>
 

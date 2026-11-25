@@ -4,7 +4,7 @@ const cors = require('cors');
 const multer = require('multer');
 const xml2js = require('xml2js');
 const Tesseract = require('tesseract.js');
-const sharp = require('sharp'); // <-- IMPORTACIÓN AGREGADA
+const sharp = require('sharp');
 const fs = require('fs');
 
 const app = express();
@@ -34,7 +34,7 @@ const upload = multer({
   }
 });
 
-// RUTA 1: Extracción de XML (CFDI 4.0) Masiva
+// RUTA 1: Extracción de XML (CFDI 4.0) Masiva con soporte completo para múltiples conceptos
 app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -52,13 +52,33 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
         const comprobante = result['cfdi:Comprobante'] || result['Comprobante'] || {};
         const emisor = comprobante['cfdi:Emisor'] || comprobante['Emisor'] || {};
         const receptor = comprobante['cfdi:Receptor'] || comprobante['Receptor'] || {};
-        const conceptosRaw = comprobante['cfdi:Conceptos']?.['cfdi:Concepto'] || comprobante['Conceptos']?.['Concepto'] || [];
-        const conceptosList = Array.isArray(conceptosRaw) ? conceptosRaw : [conceptosRaw];
+        
+        // Obtener el nodo Conceptos sin importar si trae prefijo cfdi: o no
+        const nodoConceptos = comprobante['cfdi:Conceptos'] || comprobante['Conceptos'] || {};
+        const conceptosRaw = nodoConceptos['cfdi:Concepto'] || nodoConceptos['Concepto'] || [];
+        const conceptosList = Array.isArray(conceptosRaw) ? conceptosRaw : (conceptosRaw ? [conceptosRaw] : []);
 
-        const conceptosText = conceptosList
-          .map(c => c['$']?.Descripcion || c?.Descripcion || '')
-          .filter(Boolean)
-          .join(' | ');
+        // Extraer el detalle individual de todos los conceptos del XML
+        const conceptosDetalle = conceptosList
+          .map((c) => {
+            const attrs = c['$'] || c || {};
+            const descripcion = (attrs.Descripcion || attrs.descripcion || '').trim();
+            if (!descripcion) return null;
+
+            return {
+              cantidad: attrs.Cantidad || '1',
+              unidad: attrs.ClaveUnidad || attrs.Unidad || '',
+              descripcion,
+              valorUnitario: parseFloat(attrs.ValorUnitario || 0),
+              importe: parseFloat(attrs.Importe || 0)
+            };
+          })
+          .filter(Boolean);
+
+        // Construir texto consolidado con todos los conceptos (numerados si hay más de 1)
+        const conceptosText = conceptosDetalle.length > 1
+          ? conceptosDetalle.map((item, idx) => `${idx + 1}. ${item.descripcion} ($${item.importe.toFixed(2)})`).join(' | ')
+          : (conceptosDetalle[0]?.descripcion || 'Sin descripción');
 
         const now = new Date();
         const fechaExtraccionFormatted = now.toLocaleString('es-MX', {
@@ -83,7 +103,8 @@ app.post('/api/xml/parse', upload.array('xmlFiles'), async (req, res) => {
           receptorNombre: receptor['$']?.Nombre || 'N/A',
           subtotal: parseFloat(comprobante['$']?.SubTotal || 0),
           total: parseFloat(comprobante['$']?.Total || 0),
-          concepto: conceptosText || 'Sin descripción'
+          concepto: conceptosText,
+          conceptosDetalle
         });
       } catch (fileErr) {
         console.error(`Error leyendo el archivo individual ${file.originalname}:`, fileErr);
